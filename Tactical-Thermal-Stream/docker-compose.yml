@@ -1,0 +1,22 @@
+services:
+  eneo_INT-8SF0003M0A:
+    image: realsensed_camera_obstacle_avoidance-realsense
+    container_name: theramal_camera_jazzy
+    environment:
+      - ROS_DISTRO=jazzy
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - ROS_DOMAIN_ID=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    network_mode: host
+    ipc: host
+    pid: host
+    privileged: true
+    runtime: nvidia
+    volumes:
+      - /dev:/dev
+      - ./workspace:/workspace
+    command: bash -c "source /opt/ros/jazzy/setup.bash && colcon build && source /workspace/install/setup.bash && ros2 launch eneo_ip_therm_camera dual_rtsp.launch.py"
+    stdin_open: true
+    tty: true
+    restart: always

@@ -1,0 +1,28 @@
+livox_obstacle_node:
+  ros__parameters:
+    robot:
+      footprint:
+        width: 0.8           # [m] total width of robot
+        front: 0.6           # [m] distance in front of lidar to consider as robot
+        rear: 0.8            # [m] distance behind lidar to consider as robot
+    lidar:
+      offset:
+        x: 0.0
+        y: 0.0
+        z: 0.6            # lidar height above ground
+      flip_z: true        # flip Z axis (for upside down lidar mounting)
+    obstacle_detection:
+      max_distance: 10.0       # [m] default obstacle distance threshold
+      min_height: 0.10       # [m] ground height in robot frame to start considering obstacles
+      max_height: 0.6         # [m] ignore anything above this (tuned per robot)
+      slope_start_distance: 1.0  # [m] distance from sensor where slope compensation begins
+      slope_compensation: 0.3    # [m] max height offset at max_distance (lidar.offset.z / 2)
+      grid_cell_size: 0.1     # [m] size of each grid cell (smaller = finer resolution, larger = coarser)
+      min_points_per_cell: 2  # minimum points in a grid cell to mark it as an obstacle
+    topics:
+      lidar_input: "/livox/points"
+      obstacles_output: "/obstacles/lidar"
+      filtered_points_output: "/obstacles/filtered_points"
+    frame_id: "base_footprint"  # Frame ID for OccupancyGrid (base_footprint for 2D nav, base_link for 3D)
+    publish_rate: 0.0           # [Hz] Maximum publish rate (0 = no limit, reduces RVIZ queue overflow)
+    publish_filtered_points: false  # Enable/disable filtered points publishing (set to false for better performance)

@@ -1,0 +1,12 @@
+loop_mode: false
+name: Tex
+waypoints:
+- altitude: 0
+  latitude: 48.65464881859913
+  longitude: 9.225536805908305
+- altitude: 0
+  latitude: 48.654589206362
+  longitude: 9.225549119119739
+- altitude: 0
+  latitude: 48.65453691784332
+  longitude: 9.225557168983356

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>fpsdk_apps</name>
+    <version>1.0.0</version>
+    <description>Fixposition SDK: Apps</description>
+    <maintainer email="support@fixposition.com">Fixposition Support</maintainer>
+    <license>MIT</license>
+    <export>
+        <build_type>cmake</build_type>
+    </export>
+    <depend>fpsdk_common</depend>
+    <!-- <depend condition="$ROS_VERSION == 1">fpsdk_ros1</depend>
+    <depend condition="$ROS_VERSION == 2">fpsdk_ros2</depend> -->
+    <depend>fpsdk_ros1</depend>
+    <depend>fpsdk_ros2</depend>
+</package>

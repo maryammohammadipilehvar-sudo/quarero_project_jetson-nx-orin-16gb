@@ -1,0 +1,597 @@
+        // Globals
+        let lightStatus = false;
+        let joystickActive = false;
+        let lastCameraFrameTime = 0;
+        let currentBattery = null;
+        let currentSpeed = 0;
+        let autonomousOperationEnabled = false;
+        let fusionRawState = {
+            fusion_status: null,
+            imu_status: null,
+            gnss_status: null,
+            rtk_status: null
+        };
+        // --- Move-Command-Puffer (nur letzter Wert wird gesendet) ---
+        let latestMoveCommand = { x: 0, y: 0 };      // zuletzt gewünschter Wert
+        let lastSentMoveCommand = { x: null, y: null }; // zuletzt tatsächlich gesendeter Wert
+        let moveLoopStarted = false;                 // Flag, damit der Loop nur einmal startet
+        // Joystick Variables
+        const joystickStick = document.getElementById('joystick-stick');
+        const joystickBase = joystickStick.parentElement;
+        let isDragging = false;
+        let joystickCenter = { x: 0, y: 0 };
+        let maxRadius = 0;
+
+        // Calculate joystick parameters
+        function updateJoystickDimensions() {
+            const rect = joystickBase.getBoundingClientRect();
+            joystickCenter = {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2
+            };
+            maxRadius = (rect.width / 2) - 40; // 40px = half of stick size
+        }
+
+        // Initialize joystick
+        updateJoystickDimensions();
+        window.addEventListener('resize', updateJoystickDimensions);
+
+        // Joystick Event Handlers
+        joystickStick.addEventListener('mousedown', startDrag);
+        joystickStick.addEventListener('touchstart', startDrag, { passive: false });
+
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('touchmove', drag, { passive: false });
+
+        document.addEventListener('mouseup', stopDrag);
+        document.addEventListener('touchend', stopDrag);
+
+        function startDrag(e) {
+            isDragging = true;
+            joystickActive = true;
+            e.preventDefault();
+        }
+
+        function drag(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            let dx = clientX - joystickCenter.x;
+            let dy = clientY - joystickCenter.y;
+            
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > maxRadius) {
+                const angle = Math.atan2(dy, dx);
+                dx = Math.cos(angle) * maxRadius;
+                dy = Math.sin(angle) * maxRadius;
+            }
+
+            joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+            const normalizedX = (dx / maxRadius).toFixed(2);
+            const normalizedY = -(dy / maxRadius).toFixed(2);
+
+            document.getElementById('joystick-value').textContent = 
+                `X: ${normalizedX} | Y: ${normalizedY}`;
+
+            sendMovementCommand(parseFloat(normalizedX), parseFloat(normalizedY));
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            joystickActive = false;
+
+            joystickStick.style.transform = 'translate(-50%, -50%)';
+            document.getElementById('joystick-value').textContent = 'X: 0.0 | Y: 0.0';
+
+            // Stop-Kommando in den Puffer schreiben
+            sendMovementCommand(0, 0);
+        }
+
+        /**
+         * Schreibe das gewünschte Bewegungs-Kommando in einen Puffer.
+         * Der Sender-Loop verschickt dann in festen Abständen nur den letzten Wert.
+         */
+        function sendMovementCommand(x, y) {
+            latestMoveCommand = { x, y };
+
+            // Sicherstellen, dass der Sender-Loop läuft
+            if (!moveLoopStarted) {
+                moveLoopStarted = true;
+                startMoveSenderLoop();
+            }
+        }
+
+        /**
+         * Hintergrund-Loop, der regelmäßig prüft, ob sich das Ziel-Kommando geändert hat.
+         * Wenn ja, wird genau EIN HTTP-Request geschickt.
+         * Dadurch gibt es keine lange Queue mehr und es kommt immer der aktuellste Wert an.
+         */
+        async function startMoveSenderLoop() {
+            while (true) {
+                const { y, x } = latestMoveCommand;
+
+                // Nur senden, wenn sich der Wert seit dem letzten Senden geändert hat
+                if (x !== lastSentMoveCommand.x || y !== lastSentMoveCommand.y) {
+                    lastSentMoveCommand = { x, y };
+                    try {
+                        await fetch('/api/control/move', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ x: y, y: x })
+                        });
+                    } catch (error) {
+                        console.error('Movement command error:', error);
+                    }
+                }
+
+                // Sende-Frequenz (z.B. alle 10 ms)
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+        }
+
+
+        // Toggle Light
+        async function toggleLight() {
+            try {
+                const response = await fetch('/api/control/light', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state: !lightStatus })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    updateLightButton(data.light_status);
+                }
+            } catch (error) {
+                console.error('Light toggle error:', error);
+            }
+        }
+
+        function updateLightButton(status) {
+            lightStatus = status;
+            const btn = document.getElementById('light-btn');
+            const text = document.getElementById('light-text');
+            
+            if (status) {
+                btn.className = 'toggle-button on';
+                text.textContent = 'EIN';
+            } else {
+                btn.className = 'toggle-button off';
+                text.textContent = 'AUS';
+            }
+        }
+
+        // Toggle Autonomous
+        async function toggleAutonomous() {
+            try {
+                if (autonomousOperationEnabled) {
+                    // Stop autonomous operation
+                    const response = await fetch('/api/control/stop', { method: 'POST' });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        autonomousOperationEnabled = data.autonomous_enabled || false;
+                        updateAutonomousButton();
+                    } else {
+                        alert('Fehler: ' + data.message);
+                    }
+                } else {
+                    // Start autonomous operation (requires a route to be selected)
+                    alert('Bitte erst eine Route auf der Steuerungsseite auswählen!');
+                }
+            } catch (e) {
+                console.error('Autonomous toggle error:', e);
+                alert('Fehler: ' + e.message);
+            }
+        }
+
+        function updateAutonomousButton() {
+            const btn = document.getElementById('autonomous-btn');
+            const text = document.getElementById('autonomous-text');
+            
+            if (!btn || !text) return;
+            
+            const icon = btn.querySelector('.btn-icon');
+            
+            if (autonomousOperationEnabled) {
+                btn.className = 'toggle-button on';
+                text.textContent = 'AN';
+                if (icon) icon.textContent = '▶️';
+            } else {
+                btn.className = 'toggle-button off';
+                text.textContent = 'AUS';
+                if (icon) icon.textContent = '⏹️';
+            }
+        }
+
+        async function loadAutonomousStatus() {
+            try {
+                const response = await fetch('/api/control/autonomous');
+                const data = await response.json();
+                autonomousOperationEnabled = data.autonomous_enabled || false;
+                updateAutonomousButton();
+            } catch (e) {
+                console.error('Failed to load autonomous status:', e);
+            }
+        }
+
+
+        // WebSocket für Kamera
+        let currentCamera = 'main';
+        let wsCamera = null;
+        let lastDisplayedFrameTimestamp = 0; // Track last displayed frame timestamp to skip old frames
+        
+        function switchCamera(cameraType) {
+            // Close existing WebSocket
+            if (wsCamera) {
+                wsCamera.close();
+            }
+            
+            // Reset frame timestamp when switching cameras
+            lastDisplayedFrameTimestamp = 0;
+            
+            // Update active button
+            document.querySelectorAll('.camera-switch-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-camera="${cameraType}"]`).classList.add('active');
+            
+            // Update current camera
+            currentCamera = cameraType;
+            
+            // Create new WebSocket connection
+            wsCamera = new WebSocket(`ws://${window.location.host}/ws/camera/${cameraType}`);
+            
+            wsCamera.onopen = () => {
+                updateConnectionStatus(true);
+            };
+            wsCamera.onclose = () => {
+                updateConnectionStatus(false);
+            };
+            wsCamera.onerror = () => {
+                updateConnectionStatus(false);
+            };
+            
+            wsCamera.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'camera') {
+                    // Skip old frames if timestamp is available
+                    if (data.timestamp && data.timestamp <= lastDisplayedFrameTimestamp) {
+                        return; // Skip this old frame
+                    }
+                    
+                    const container = document.getElementById('camera-container');
+                    const img = document.getElementById('camera-feed');
+                    
+                    // Prevent browser caching of images
+                    img.crossOrigin = 'anonymous';
+                    
+                    // Directly set new image source - browser will display it immediately
+                    // No need to clear old image (prevents flicker) or use requestAnimationFrame (reduces latency)
+                    // Add timestamp to data URL to prevent browser caching
+                    const timestamp = Date.now();
+                    img.src = 'data:image/jpeg;base64,' + data.data + '#t=' + timestamp;
+                    container.classList.add('has-frame');
+                    lastCameraFrameTime = timestamp;
+                    
+                    // Update timestamp tracking
+                    if (data.timestamp) {
+                        lastDisplayedFrameTimestamp = data.timestamp;
+                    }
+                }
+            };
+        }
+        
+        // Initialize camera on page load
+        switchCamera('main');
+        
+        // Add event listeners to camera switch buttons
+        document.querySelectorAll('.camera-switch-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cameraType = btn.getAttribute('data-camera');
+                switchCamera(cameraType);
+            });
+        });
+
+        // WebSocket für Robot State
+        const wsRobotState = new WebSocket(`ws://${window.location.host}/ws/robot_state`);
+        let lastRobotStateTime = 0; // Initialize to 0 so timeout check immediately detects no message
+        const ROBOT_TIMEOUT = 5000; // 5 seconds timeout
+        let robotStateReceived = false; // Track if we've ever received a valid robot state
+        let lastBackendConnectionStatus = null; // Track backend's connection status
+        
+        wsRobotState.onopen = () => {
+            console.log('Robot state WebSocket connected');
+        };
+        
+        wsRobotState.onerror = (error) => {
+            console.error('Robot state WebSocket error:', error);
+            updateRobotConnectionStatus(false);
+        };
+        
+        wsRobotState.onclose = () => {
+            console.log('Robot state WebSocket closed');
+            updateRobotConnectionStatus(false);
+        };
+        
+        wsRobotState.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'robot_state') {
+                const stateData = data.data;
+                // Use backend's robot_connected status if available (this is the source of truth)
+                if (stateData.robot_connected !== undefined) {
+                    // Backend knows if robot controller node is actually publishing
+                    lastBackendConnectionStatus = stateData.robot_connected;
+                    updateRobotConnectionStatus(stateData.robot_connected);
+                    if (stateData.robot_connected) {
+                        robotStateReceived = true;
+                        lastRobotStateTime = Date.now();
+                    } else {
+                        // If backend says disconnected, reset our tracking
+                        robotStateReceived = false;
+                        lastRobotStateTime = 0;
+                    }
+                } else {
+                    // Fallback: check if we have valid robot data
+                    if (stateData.battery !== undefined || stateData.velocity !== undefined || stateData.error_status !== undefined) {
+                        robotStateReceived = true;
+                        lastRobotStateTime = Date.now();
+                        updateRobotConnectionStatus(true);
+                    }
+                }
+                
+                currentBattery = stateData.battery;
+                // Use filtered km/h speed if available, otherwise fallback to m/s
+                currentSpeed = stateData.velocity_kmh !== undefined ? stateData.velocity_kmh : stateData.velocity;
+                updateStatusDisplays();
+                
+                // Sync button states from robot (single source of truth)
+                if (stateData.light_state !== undefined) {
+                    updateLightButton(stateData.light_state);
+                }
+                if (stateData.autonomous_enabled !== undefined) {
+                    autonomousOperationEnabled = stateData.autonomous_enabled;
+                    updateAutonomousButton();
+                }
+            }
+        };
+
+        // Track intervals for cleanup
+        const intervals = [];
+
+        // Check robot connection status periodically (only as fallback if backend status not available)
+        const robotStateCheckInterval2 = setInterval(() => {
+            // Check WebSocket connection status
+            if (wsRobotState.readyState !== WebSocket.OPEN) {
+                updateRobotConnectionStatus(false);
+                return;
+            }
+            
+            // If backend provides connection status, trust it completely
+            // Only use timeout check if backend status is not available
+            if (lastBackendConnectionStatus === null) {
+                const timeSinceLastState = Date.now() - lastRobotStateTime;
+                if (!robotStateReceived || lastRobotStateTime === 0 || timeSinceLastState > ROBOT_TIMEOUT) {
+                    updateRobotConnectionStatus(false);
+                }
+            }
+            // Otherwise, backend status is already being used in onmessage handler
+        }, 1000);
+        intervals.push(robotStateCheckInterval2);
+
+        function updateRobotConnectionStatus(connected) {
+            const statusEl = document.getElementById('robot-connection-status');
+            if (!statusEl) return;
+            
+            if (connected) {
+                statusEl.classList.remove('disconnected');
+                statusEl.classList.add('connected');
+                statusEl.style.display = 'none'; // Hide when connected
+            } else {
+                statusEl.classList.remove('connected');
+                statusEl.classList.add('disconnected');
+                statusEl.style.display = 'flex'; // Show when disconnected
+            }
+        }
+
+        // Check robot connection status periodically (only as fallback if backend status not available)
+        setInterval(() => {
+            // Check WebSocket connection status
+            if (wsRobotState.readyState !== WebSocket.OPEN) {
+                updateRobotConnectionStatus(false);
+                return;
+            }
+            
+            // If backend provides connection status, trust it completely
+            // Only use timeout check if backend status is not available
+            if (lastBackendConnectionStatus === null) {
+                const timeSinceLastState = Date.now() - lastRobotStateTime;
+                if (!robotStateReceived || lastRobotStateTime === 0 || timeSinceLastState > ROBOT_TIMEOUT) {
+                    updateRobotConnectionStatus(false);
+                }
+            }
+            // Otherwise, backend status is already being used in onmessage handler
+        }, 1000);
+
+        // Initialize connection status on page load - delay showing disconnected to prevent flickering
+        // Wait for first WebSocket message before showing disconnected status
+        setTimeout(() => {
+            // Only show disconnected if we haven't received any connection status from backend
+            // and haven't received any robot state messages
+            if (lastBackendConnectionStatus === null && !robotStateReceived) {
+                updateRobotConnectionStatus(false);
+            }
+        }, 1500); // Wait 1.5 seconds before showing disconnected to allow WebSocket to connect
+
+        // Log management functions - only save to localStorage, don't display on this page
+        const MAX_STORED_LOGS = 100;
+
+        function addLogEntry(entry) {
+            // On non-index pages, only save to localStorage, don't display
+            // Get current logs from storage
+            let logs = [];
+            try {
+                const storedLogs = localStorage.getItem('robot_logs');
+                if (storedLogs) {
+                    logs = JSON.parse(storedLogs);
+                }
+            } catch (e) {
+                console.error('Failed to load logs from storage:', e);
+            }
+
+            // Handle connection status messages
+            if (entry.connection_status !== undefined) {
+                if (entry.connection_status === false) {
+                    if (typeof updateFusionBadges === 'function') {
+                        updateFusionBadges(null);
+                    }
+                    // Add disconnected message
+                    logs.unshift({
+                        timestamp: entry.timestamp,
+                        message: entry.message,
+                        isError: true,
+                        connection_status: false,
+                        count: 1
+                    });
+                } else {
+                    // Remove disconnected messages when connected
+                    logs = logs.filter(log => log.connection_status !== false);
+                }
+            } else {
+                // Regular log entry - check for duplicates
+                const existingIndex = logs.findIndex(log => 
+                    log.message === entry.message && 
+                    log.isError === (entry.isError || false) &&
+                    log.connection_status === undefined
+                );
+
+                if (existingIndex !== -1) {
+                    // Increment count and move to front (newest first)
+                    const existingLog = logs[existingIndex];
+                    existingLog.count++;
+                    existingLog.timestamp = entry.timestamp;
+                    // Remove from current position and add to front
+                    logs.splice(existingIndex, 1);
+                    logs.unshift(existingLog);
+                } else {
+                    // Add new entry at the front
+                    logs.unshift({
+                        timestamp: entry.timestamp,
+                        message: entry.message,
+                        isError: entry.isError || false,
+                        count: 1
+                    });
+                }
+            }
+
+            // Keep only the most recent logs
+            const logsToStore = logs.slice(0, MAX_STORED_LOGS);
+            localStorage.setItem('robot_logs', JSON.stringify(logsToStore));
+        }
+
+        // WebSocket für Position (für Light Status und Logs)
+        const wsPosition = new WebSocket(`ws://${window.location.host}/ws/position`);
+        wsPosition.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'light_status') {
+                updateLightButton(data.data);
+            } else if (data.type === 'autonomous_status') {
+                autonomousOperationEnabled = data.data;
+                updateAutonomousButton();
+            } else if (data.type === 'event') {
+                addLogEntry(data.data);
+            }
+        };
+
+        // Update Status Displays
+        function updateStatusDisplays() {
+            if (currentBattery !== null && currentBattery !== undefined) {
+                const batteryEl = document.getElementById('battery-display');
+                batteryEl.textContent = `${currentBattery}%`;
+                
+                if (currentBattery < 20) {
+                    batteryEl.style.color = '#f44336';
+                } else if (currentBattery < 50) {
+                    batteryEl.style.color = '#FF9800';
+                } else {
+                    batteryEl.style.color = '#4CAF50';
+                }
+            }
+
+            if (currentSpeed !== null && currentSpeed !== 'N/A') {
+                const speedEl = document.getElementById('speed-display');
+                const speed = typeof currentSpeed === 'number' ? currentSpeed : 0;
+                // Display in km/h (filtered value from speed estimator)
+                speedEl.textContent = `${speed.toFixed(1)} km/h`;
+            }
+        }
+
+        // Connection Status
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connection-status');
+            const textEl = document.getElementById('connection-text');
+            
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                textEl.textContent = 'Verbunden';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                textEl.textContent = 'Getrennt';
+            }
+        }
+
+        // Kamera-Verfügbarkeit überwachen
+        const cameraCheckInterval = setInterval(() => {
+            const container = document.getElementById('camera-container');
+            const img = document.getElementById('camera-feed');
+            const placeholder = document.getElementById('camera-placeholder');
+            
+            if (!lastCameraFrameTime || Date.now() - lastCameraFrameTime > 3000) {
+                container.classList.remove('has-frame');
+                img.removeAttribute('src');
+                placeholder.textContent = '📷 Kamera nicht verfügbar';
+            }
+        }, 1000);
+        intervals.push(cameraCheckInterval);
+
+        // Initial load
+        (async () => {
+            // Check debug mode from backend
+            try {
+                const debugResponse = await fetch('/api/debug/enabled');
+                const debugData = await debugResponse.json();
+                if (debugData.debug_enabled) {
+                    document.body.classList.add('debug-mode');
+                    console.log('Debug mode enabled');
+                }
+            } catch (e) {
+                console.warn('Could not check debug mode:', e);
+            }
+
+            // Load initial states
+            fetch('/api/control/light').then(r => r.json()).then(data => {
+                updateLightButton(data.light_status);
+            });
+
+            loadAutonomousStatus();
+        })();
+
+        // Cleanup intervals when leaving the page
+        window.addEventListener('beforeunload', () => {
+            intervals.forEach(id => clearInterval(id));
+        });
+
+        // Fallback for mobile browsers
+        window.addEventListener('pagehide', () => {
+            intervals.forEach(id => clearInterval(id));
+        });

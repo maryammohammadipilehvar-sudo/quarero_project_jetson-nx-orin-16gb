@@ -1,0 +1,12 @@
+string event_id
+builtin_interfaces/Time event_time
+string[] camera_ids
+float32 pre_event_seconds
+float32 post_event_seconds
+---
+bool success
+string message
+string[] file_paths
+string[] camera_ids_out
+
+

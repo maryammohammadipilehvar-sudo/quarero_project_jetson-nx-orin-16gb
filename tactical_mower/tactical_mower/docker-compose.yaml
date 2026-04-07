@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  # robot
+  ros2:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ros2_jetson
+    container_name: ros2_jetson
+    runtime: nvidia        # aktiviert GPU-Zugriff
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - ROS_DOMAIN_ID=0
+      - DISPLAY=${DISPLAY}
+    network_mode: host     # wichtig für ROS2-DDS-Kommunikation
+    ipc: host 
+    pid: host
+    devices: 
+      - /dev/ttyTHS1:/dev/ttyTHS1  # UART 1
+      - /dev/ttyTHS2:/dev/ttyTHS2  # UART 2
+      # TODO: Change first part back to ACM0
+      - /dev/ttyACM0:/dev/ttyACM0  # Roboclaw
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./ros2_ws:/app/ros2_ws
+      - ../routen:/routen
+    command: bash -c "cd /app/ros2_ws && ./src/fixposition/setup_ros_ws.sh &&  colcon build --build-base build_ros2 --install-base install_ros2 && source /app/ros2_ws/install_ros2/setup.bash && ros2 launch system_bringup controller.launch.py"
+    tty: true
+    restart: unless-stopped
+
+
+  # web
+  web_app:
+    # Build context is web_app/ directory
+    # Static files (static/, media/) are copied into image during build
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.web
+    container_name: web_app
+    ports:
+      - "8020:8020"
+    network_mode: host
+    ipc: host
+    pid: host
+    privileged: true
+    volumes:
+      # ROS2 Domain ID shared memory
+      - /dev/shm:/dev/shm
+      # Routes stored on host system
+      - ../routen:/data
+      # ROS2 workspace (mounted for development, code changes require rebuild)
+      - ./ros2_ws:/app/ros2_ws
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - PYTHONUNBUFFERED=1
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/tmp/fastdds.xml
+      - ROS_LOCALHOST_ONLY=0
+      - DEBUG_MODE=true
+      - APP_VERSION=0.9.2
+    command: bash -c "source /opt/ros/jazzy/setup.bash && cd /app/ros2_ws && colcon build --build-base build_web --install-base install_web --packages-ignore fixposition_driver_ros1 fixposition-sdk/fpsdk_ros1 && source /app/ros2_ws/install_web/setup.bash && /app/ros2_ws/install_web/robot_web_interface/bin/robot_web_interface"
+    restart: unless-stopped 

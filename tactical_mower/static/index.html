@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard – Robotersteuerung</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/common.css" />
+    <link rel="stylesheet" href="/static/css/index.css" />
+</head>
+<body>
+    <div class="navbar">
+        <!-- Links Navigation -->
+        <div class="nav-links">
+            <a href="/" class="nav-link active"><span class="nav-text">Dashboard</span></a>
+            <a href="/control" class="nav-link"><span class="nav-text">Manuelle<br>Steuerung</span></a>
+            <a href="/scheduler" class="nav-link"><span class="nav-text">Zeitpläne</span></a>
+            <a href="/events" class="nav-link"><span class="nav-text">Ereignisse</span></a>
+            <a href="/settings" class="nav-link"><span class="nav-text">Einstellungen</span></a>
+        </div>
+
+        <!-- Status Badges -->
+       <div class="nav-status-group">
+            <div id="badge-gnss1" class="status-badge">
+                <span class="badge-label">GNSS1</span>
+            </div>
+            <div id="badge-gnss2" class="status-badge">
+                <span class="badge-label">GNSS2</span>
+            </div>
+            <div id="badge-imu" class="status-badge">
+                <span class="badge-label">IMU</span>
+            </div>
+            <div id="badge-fusion" class="status-badge status-badge-fusion">
+                <span class="badge-label">Fusion</span>
+            </div>
+        </div>
+        <!-- Connection Status Indicator -->
+        <div id="robot-connection-status" class="robot-connection-status" style="display: none;">
+            <span class="connection-text">Keine Verbindung zum Roboter</span>
+        </div>
+        <!-- Logo rechts -->
+        <div class="navbar-right">
+            <img src="/static/media/logo.svg" alt="Quarero">
+        </div>
+    </div>
+
+
+    <div class="container">
+        <div class="panel" id="camera-panel">
+            <h2>Kamera</h2>
+            <div class="camera-controls">
+                <button class="camera-btn active" onclick="switchCamera('main', this)">RGB</button>
+                <button class="camera-btn" onclick="switchCamera('person_detection', this)">Person Detection</button>
+                <button class="camera-btn" onclick="switchCamera('thermal1', this)">Thermal 1</button>
+                <button class="camera-btn" onclick="switchCamera('thermal2', this)">Thermal 2</button>
+                <button class="camera-btn debug-only" onclick="switchCamera('lidar_debug', this)">LiDAR Debug</button>
+                <button class="camera-btn" onclick="switchCamera('depth_debug', this)">Tiefe</button>
+            </div>
+
+            <div class="camera-container" id="camera-container">
+                <div id="camera-placeholder" class="camera-placeholder">Kamera nicht verfügbar</div>
+                <img id="camera-feed" alt="Kamera Feed" title="Klicken zum Vergrößern" />
+                <div class="camera-expand-hint">⛶ Klicken zum Vergrößern</div>
+            </div>
+        </div>
+
+        <div class="panel" id="map-panel">
+            <h2>Position &amp; Routen</h2>
+            <div class="focus-map">
+                <button class="camera-btn" onclick="focusOnHome()">Karte zentrieren</button>
+                <button class="camera-btn" onclick="toggleMapFullscreen()" id="map-fullscreen-btn" title="Vollbild">⛶ Vollbild</button>
+                <div class="route-info" id="route-info" style="display: none;">
+                    <div class="route-name" id="route-name-display"></div>
+                    <div class="route-distance" id="route-distance"></div>
+                </div>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <div class="panel" id="control-panel">
+            <h2>Steuerung</h2>
+            
+            <div class="control-grid">
+                <div class="control-left">
+                    <h3 class="section-title">Route</h3>
+                    
+                    <div class="route-selector">
+                        <label style="margin-bottom: 5px; display: block;">Aktive Route</label>
+                        <select id="route-select" onchange="loadSelectedRoute()">
+                            <option value="">— keine —</option>
+                        </select>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-edit" onclick="openRouteEditor('new')">Neue Route</button>
+                        <button class="btn-edit" onclick="openRouteEditor('edit')">Route bearbeiten</button>
+                        <button class="btn-delete" onclick="deleteCurrentRoute()">Route löschen</button>
+                    </div>
+                </div>
+
+        <div class="control-right">
+            <h3 class="section-title">Befehle</h3>
+            
+            <div class="control-buttons">
+                <button id="autonomous-btn" class="btn-stop btn-large" onclick="stopAutonomous()">
+                    <span class="btn-text">Autonom: Aus</span>
+                </button>
+                
+                <button class="btn-start btn-large" onclick="goToCharge()">
+                    <span class="btn-text">Rückkehr zur Ladestation</span>
+                </button>
+                
+                <button id="light-btn" class="btn-light-off btn-large" onclick="toggleLight()">
+                    <span class="btn-text" id="light-text">Licht Aus</span>
+                </button>
+                
+                <button id="charging-btn" class="btn-charging-off btn-large" onclick="toggleCharging()">
+                    <span class="btn-text" id="charging-text">Laden Aus</span>
+                </button>
+            </div>
+        </div>
+                    </div>
+        </div>
+
+        <div class="panel" id="log-panel">
+            <h2>System &amp; Log</h2>
+            
+            <div class="log-grid">
+                <div class="log-left">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 class="section-title" style="margin: 0;">Ereignislog</h3>
+                        <button id="clear-logs-btn" class="btn-clear-logs" onclick="clearLogs()" title="Log leeren">Log leeren</button>
+                    </div>
+                    <div id="event-log"></div>
+                </div>
+
+                <div class="log-right">
+                    <h3 class="section-title">Status</h3>
+                    <div class="robot-status">
+                        <div class="status-card">
+                            <div class="status-content">
+                                <div class="status-label-small">Akku</div>
+                                <div class="status-value-large" id="battery-level">—</div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <div class="status-content">
+                                <div class="status-label-small">Geschwindigkeit</div>
+                                <div class="status-value-large" id="velocity-value">— m/s</div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <div class="status-content">
+                                <div class="status-label-small">Verbleibende Einsatzzeit</div>
+                                <div class="status-value-large" id="runtime-value">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-dialog">
+            <div class="modal-title">Bestätigung</div>
+            <div class="modal-message" id="confirm-message">Alle aktiven Zeitpläne werden deaktiviert. Fortfahren?</div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-secondary" onclick="closeConfirmModal()">Abbrechen</button>
+                <button class="modal-btn modal-btn-primary" onclick="confirmGoToCharge()">Fortfahren</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="route-editor" class="editor-sidebar">
+        <div class="editor-header">
+            <h3 id="editor-title">Neue Route</h3>
+            <button class="close-btn" onclick="closeRouteEditor()" aria-label="Schließen">×</button>
+        </div>
+        
+        <div class="editor-form">
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="editor-route-name" placeholder="z. B. Hauptgebäude">
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="editor-loop-mode" onchange="toggleLoopMode()">
+                    Als Rundfahrt (Loop)
+                </label>
+                <p class="form-hint">Bei aktiviertem Loop fährt der Roboter die Route als geschlossenen Rundgang (Start- und Endpunkt verbunden).</p>
+            </div>
+            
+            <div class="form-group">
+                <button id="reverse-route-btn" class="btn-edit" onclick="reverseRouteOrder()" disabled style="width: 100%;">
+                    Reihenfolge umkehren
+                </button>
+            </div>
+            
+            <div class="editor-info" id="editor-info-text">
+                0 Waypoints — Karte anklicken zum Hinzufügen
+            </div>
+            
+            <div class="waypoint-list" id="waypoint-list">
+                <p class="waypoint-empty-hint">Noch keine Waypoints</p>
+            </div>
+            
+            <div class="button-group" style="grid-template-columns: 1fr;">
+                <button class="btn-save" onclick="saveRoute()">Speichern</button>
+                <button class="btn-stop" onclick="closeRouteEditor()">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/index.js"></script>
+<!-- Gemeinsame Scripts -->
+<script src="/static/js/common.js"></script>
+    <!-- Fullscreen Camera Modal -->
+    <div id="camera-modal" class="camera-modal-overlay" onclick="closeCameraModal()">
+        <div class="camera-modal-header">
+            <span id="camera-modal-title">Kamera</span>
+            <button class="camera-modal-close" onclick="event.stopPropagation(); closeCameraModal()">✕</button>
+        </div>
+        <div id="camera-modal-feed-wrapper" style="display:flex;align-items:center;justify-content:center;flex:1;padding-top:48px;width:100%;height:100%;"></div>
+    </div>
+</body>
+</html>

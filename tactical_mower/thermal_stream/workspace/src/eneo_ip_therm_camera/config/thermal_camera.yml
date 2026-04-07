@@ -1,0 +1,10 @@
+device: AXIS_F41
+ip: 192.168.10.174
+port: 554
+channel:
+  rgb: 1
+  thermal: 2
+
+optical_resolution: [1920, 1200]
+thermical_resolution:  [680, 480]
+product_webseite: https://www.axis.com/products/axis-f41-main-unit/support

@@ -1,0 +1,9 @@
+sector_obstacle_detector:
+  ros__parameters:
+    depth_topic: "/camera/camera/depth/image_rect_raw"
+    near_distance_m: 1.0
+    far_distance_m: 2.0
+    min_obstacle_pixels: 200
+    min_sector_pixels: 50
+    debug_image_topic: "/camera/camera/depth/obstacle_debug"
+    num_cols: 5

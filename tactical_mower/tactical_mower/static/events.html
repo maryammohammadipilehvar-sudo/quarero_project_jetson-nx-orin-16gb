@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ereignisse – Robotersteuerung</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="/static/css/common.css" />
+    <link rel="stylesheet" href="/static/css/events.css" />
+</head>
+<body>
+    <div class="navbar">
+        <div class="nav-links">
+            <a href="/" class="nav-link"><span class="nav-text">Dashboard</span></a>
+            <a href="/control" class="nav-link"><span class="nav-text">Manuelle<br>Steuerung</span></a>
+            <a href="/scheduler" class="nav-link"><span class="nav-text">Zeitpläne</span></a>
+            <a href="/events" class="nav-link active"><span class="nav-text">Ereignisse</span></a>
+            <a href="/settings" class="nav-link"><span class="nav-text">Einstellungen</span></a>
+        </div>
+        <!-- Status Badges -->
+        <div class="nav-status-group">
+            <div id="badge-gnss1" class="status-badge">
+                <span class="badge-label">GNSS1</span>
+            </div>
+            <div id="badge-gnss2" class="status-badge">
+                <span class="badge-label">GNSS2</span>
+            </div>
+            <div id="badge-imu" class="status-badge">
+                <span class="badge-label">IMU</span>
+            </div>
+            <div id="badge-fusion" class="status-badge status-badge-fusion">
+                <span class="badge-label">Fusion</span>
+            </div>
+        </div>
+        <!-- Connection Status Indicator -->
+        <div id="robot-connection-status" class="robot-connection-status" style="display: none;">
+            <span class="connection-text">Keine Verbindung zum Roboter</span>
+        </div>
+        <div class="navbar-right">
+            <img src="/static/media/logo.svg" alt="Quarero">
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">Ereignisübersicht</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button id="edit-mode-btn" class="btn-edit-mode" onclick="toggleEditMode()">Bearbeiten</button>
+                    <button onclick="openTimeWindowModal()" style="padding: 8px 16px; background: var(--brand-blue); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Zeitfenster</button>
+                </div>
+            </div>
+            <div id="edit-mode-controls" class="edit-mode-controls hidden">
+                <button class="btn-bulk-action btn-bulk-delete" onclick="deleteSelectedEvents()">Ausgewählte löschen</button>
+                <button class="btn-bulk-action btn-bulk-download" onclick="downloadAllVideosFromSelected()">Videos herunterladen</button>
+                <span id="selected-count" class="selected-count">0 ausgewählt</span>
+            </div>
+            <div class="date-filter">
+                <button class="date-nav-btn" onclick="changeDay(-1)">◀</button>
+                <span id="selected-date-label">–</span>
+                <button class="date-nav-btn" onclick="changeDay(1)">▶</button>
+                <input type="text" id="date-picker" placeholder="Datum auswählen" readonly>
+            </div>
+            <div id="event-list" class="event-list">
+                <!-- Filled by JS -->
+            </div>
+            <!-- Load more button will be added here by JS -->
+        </div>
+
+        <div class="panel">
+            <h2>Details &amp; Wiedergabe</h2>
+            <div id="no-event-selected" class="no-event-hint">
+                Ereignis in der Liste auswählen, um Details und Videoclips anzuzeigen.
+            </div>
+            <div id="event-detail" style="display: none;">
+                <div class="detail-grid">
+                    <div class="detail-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+                            <h3 style="margin: 0;">Details</h3>
+                            <button id="delete-event-btn" class="delete-btn" onclick="deleteCurrentEvent()" style="display: none;">Löschen</button>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Typ:</span>
+                            <span class="detail-value" id="detail-type"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Gerät:</span>
+                            <span class="detail-value" id="detail-device"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Zeit (UTC):</span>
+                            <span class="detail-value" id="detail-time"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">E-Mail gesendet:</span>
+                            <span class="detail-value" id="detail-email"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Beschreibung</span>
+                        </div>
+                        <div class="detail-description" id="detail-description"></div>
+                    </div>
+                    <div class="detail-section">
+                        <h3>Videoclips</h3>
+                        <div id="video-list" class="video-list">
+                            <!-- video players -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download Progress Modal -->
+    <div id="download-progress-modal" class="download-progress-modal">
+        <div class="download-progress-content">
+            <div class="download-progress-header">Download läuft …</div>
+            <div class="download-progress-text" id="download-progress-text">Vorbereitung...</div>
+            <div class="download-progress-bar-container">
+                <div class="download-progress-bar" id="download-progress-bar"></div>
+            </div>
+            <div class="download-progress-details" id="download-progress-details">0 / 0</div>
+            <button class="download-progress-cancel" onclick="cancelDownload()">Abbrechen</button>
+        </div>
+    </div>
+
+    <!-- Time Window Configuration Modal -->
+    <div id="time-window-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Zeitfenster für E-Mail-Benachrichtigungen</h2>
+                <button class="modal-close" onclick="closeTimeWindowModal()" aria-label="Schließen">×</button>
+            </div>
+
+            <div class="always-enable-section">
+                <h3>Immer aktiv</h3>
+                <p class="always-enable-desc">Ereignistypen, die unabhängig von Zeitfenstern immer E-Mails auslösen:</p>
+                <div class="always-enable-buttons">
+                    <button id="always-enable-fire" class="btn-always-enable" onclick="toggleAlwaysEnable('fire')">Feuer</button>
+                    <button id="always-enable-person" class="btn-always-enable" onclick="toggleAlwaysEnable('person')">Person</button>
+                </div>
+            </div>
+
+            <div class="timeout-settings-section">
+                <h3>Timeout</h3>
+                <div class="timeout-settings-grid">
+                    <div class="timeout-setting">
+                        <label for="email-notification-timeout">Erneut Benachrichtigen nach (Sekunden):</label>
+                        <div class="timeout-description">Zeit in Sekunden, nach der eine weitere E-Mail-Benachrichtigung gesendet werden kann (0–300 Sekunden).</div>
+                        <div class="timeout-input-group">
+                            <input type="range" id="email-notification-timeout" min="0" max="300" step="5" value="60" 
+                                   oninput="updateTimeoutDisplay('email-notification-timeout', 'email-notification-timeout-display')">
+                            <span id="email-notification-timeout-display" class="timeout-display">60</span>
+                            <span class="timeout-unit">Sek.</span>
+                        </div>
+                    </div>
+                    <div class="timeout-setting">
+                        <label for="video-capture-timeout">Video-Aufnahme Timeout (Sekunden):</label>
+                        <div class="timeout-description">Zeit in Sekunden, in der keine weitere Video-Aufnahme ausgelöst wird (0–300 Sekunden).</div>
+                        <div class="timeout-input-group">
+                            <input type="range" id="video-capture-timeout" min="0" max="300" step="5" value="60" 
+                                   oninput="updateTimeoutDisplay('video-capture-timeout', 'video-capture-timeout-display')">
+                            <span id="video-capture-timeout-display" class="timeout-display">60</span>
+                            <span class="timeout-unit">Sek.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <h3 style="margin: 0;">Zeitfenster</h3>
+                <button class="btn-add-window" onclick="addTimeWindow()">Zeitfenster hinzufügen</button>
+            </div>
+            <p class="form-hint">Zeitfenster legen fest, in welchen Uhrzeiten E-Mail-Benachrichtigungen für Alarme gesendet werden. Mehrere Zeitfenster möglich (z. B. tags und nachts getrennt).</p>
+
+            <div id="time-window-list" class="time-window-list">
+                <!-- Windows will be added here by JavaScript -->
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel-modal" onclick="closeTimeWindowModal()">Abbrechen</button>
+                <button class="btn-save-modal" onclick="saveTimeWindows()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="/static/js/events.js"></script>
+
+<!-- Gemeinsame Scripts -->
+<script src="/static/js/common.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Request
+geometry_msgs/PoseStamped goal_pose
+geometry_msgs/PoseStamped start_pose  # optional, leer = aus TF lesen
+---
+# Response
+nav_msgs/Path path
+bool path_found
+float32 planning_time
+string message
+

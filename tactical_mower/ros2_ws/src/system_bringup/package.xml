@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>system_bringup</name>
+  <version>0.0.0</version>
+  <description>System launch orchestrator package</description>
+  <maintainer email="info@ai-robotic.de">root</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Runtime dependencies for launch -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+
+  <!-- Packages whose nodes/launches are started -->
+  <exec_depend>control</exec_depend>
+  <exec_depend>drive</exec_depend>
+  <exec_depend>fixposition_driver_ros2</exec_depend>
+  <exec_depend>nav2_pkg</exec_depend>
+  <exec_depend>video_ringbuffer</exec_depend>
+  <exec_depend>eneo_event_publisher</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

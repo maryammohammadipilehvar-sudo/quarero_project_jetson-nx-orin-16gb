@@ -1,0 +1,6 @@
+[submodule "ros2_ws/src/fixposition"]
+	path = ros2_ws/src/fixposition
+	url = https://github.com/fixposition/fixposition_driver.git
+[submodule "ros2_ws/src/ros2_navigation"]
+	path = ros2_ws/src/ros2_navigation
+	url = https://github.com/AI-Robotic-GmbH/ros2_navigation.git

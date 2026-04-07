@@ -1,0 +1,31 @@
+auto_charge_return: true
+battery_threshold: 50
+charge_detection_radius: 0.8
+charge_point:
+  latitude: 48.654630961322816
+  longitude: 9.22553979762239
+  yaw: -83.68461463053238
+enable_obstacle_avoidance: true
+home_point:
+  latitude: 48.65464881859913
+  longitude: 9.225536805908305
+home_tolerance: 0.5
+max_route_distance: 3.0
+security_always_enable_event_types: []
+security_email:
+  enabled: false
+  password: ''
+  recipients: []
+  sender: ''
+  smtp_host: ''
+  smtp_port: 587
+  use_tls: true
+  username: ''
+security_email_notification_timeout_seconds: 60
+security_event_defaults:
+  post_event_seconds: 10.0
+  pre_event_seconds: 10.0
+security_notification_windows: []
+security_video_capture_timeout_seconds: 60
+speed_factor: 1.444
+waypoint_tolerance: 0.5

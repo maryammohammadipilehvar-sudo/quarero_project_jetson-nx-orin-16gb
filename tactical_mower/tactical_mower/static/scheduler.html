@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeitpläne – Robotersteuerung</title>
+    <link rel="stylesheet" href="/static/css/common.css" />
+    <link rel="stylesheet" href="/static/css/scheduler.css" />
+</head>
+<body>
+    <div class="navbar">
+        <div class="nav-links">
+            <a href="/" class="nav-link"><span class="nav-text">Dashboard</span></a>
+            <a href="/control" class="nav-link"><span class="nav-text">Manuelle<br>Steuerung</span></a>
+            <a href="/scheduler" class="nav-link active"><span class="nav-text">Zeitpläne</span></a>
+            <a href="/events" class="nav-link"><span class="nav-text">Ereignisse</span></a>
+            <a href="/settings" class="nav-link"><span class="nav-text">Einstellungen</span></a>
+        </div>
+
+        <!-- Status Badges -->
+        <div class="nav-status-group">
+            <div id="badge-gnss1" class="status-badge">
+                <span class="badge-label">GNSS1</span>
+            </div>
+            <div id="badge-gnss2" class="status-badge">
+                <span class="badge-label">GNSS2</span>
+            </div>
+            <div id="badge-imu" class="status-badge">
+                <span class="badge-label">IMU</span>
+            </div>
+            <div id="badge-fusion" class="status-badge status-badge-fusion">
+                <span class="badge-label">Fusion</span>
+            </div>
+        </div>
+        <!-- Connection Status Indicator -->
+        <div id="robot-connection-status" class="robot-connection-status" style="display: none;">
+            <span class="connection-text">Keine Verbindung zum Roboter</span>
+        </div>
+        <!-- Logo rechts -->
+        <div class="navbar-right">
+            <img src="/static/media/logo.svg" alt="Quarero">
+        </div>
+    </div>
+</body>
+
+    <div class="container">
+        <!-- Schedule Editor Panel -->
+        <div class="panel">
+            <h2>Zeitplan anlegen oder bearbeiten</h2>
+            
+            <div class="info-box">
+                Zeitpläne mit einer oder mehreren Routen. Ausführung nacheinander oder in zufälliger Reihenfolge.
+            </div>
+
+            <!-- Multi-Route Selector -->
+            <div class="form-group">
+                <label>Routen auswählen:</label>
+                <p class="form-hint">Route aus der Liste wählen, Wiederholungen angeben (z. B. 2 für zweimal hintereinander) und „Hinzufügen“ klicken. Reihenfolge per Drag &amp; Drop änderbar.</p>
+                <div class="multi-route-selector">
+                    <div class="route-add-section">
+                        <select id="route-selector">
+                            <option value="">-- Route auswählen --</option>
+                        </select>
+                        <input type="number" id="repeat-count" min="1" value="1" placeholder="Wdh.">
+                        <button class="btn-add-route" onclick="addRouteToSchedule()">Hinzufügen</button>
+                    </div>
+                    
+                    <div id="selected-routes" class="selected-routes-list empty">
+                        Keine Routen ausgewählt
+                    </div>
+                </div>
+            </div>
+
+            <!-- Route Mode Selector -->
+            <div class="form-group">
+                <label>Ausführungsmodus:</label>
+                <p class="form-hint">Sequenziell: Routen nacheinander in der festgelegten Reihenfolge. Zufällig: Reihenfolge wird bei jeder Ausführung zufällig gewählt.</p>
+                <div class="route-mode-selector">
+                    <button class="mode-btn active" data-mode="sequential" onclick="selectRouteMode('sequential')">Sequenziell</button>
+                    <button class="mode-btn" data-mode="random" onclick="selectRouteMode('random')">Zufällig</button>
+                </div>
+            </div>
+
+            <!-- Weekdays -->
+            <div class="form-group">
+                <label>Wochentage auswählen:</label>
+                <p class="form-hint">An welchen Tagen der Zeitplan laufen soll. Mehrere Wochentage anklickbar.</p>
+                <div class="weekdays">
+                    <button class="weekday-btn" data-day="0" onclick="toggleWeekday(0)">Mo</button>
+                    <button class="weekday-btn" data-day="1" onclick="toggleWeekday(1)">Di</button>
+                    <button class="weekday-btn" data-day="2" onclick="toggleWeekday(2)">Mi</button>
+                    <button class="weekday-btn" data-day="3" onclick="toggleWeekday(3)">Do</button>
+                    <button class="weekday-btn" data-day="4" onclick="toggleWeekday(4)">Fr</button>
+                    <button class="weekday-btn" data-day="5" onclick="toggleWeekday(5)">Sa</button>
+                    <button class="weekday-btn" data-day="6" onclick="toggleWeekday(6)">So</button>
+                </div>
+            </div>
+
+            <!-- Time Range -->
+            <div class="form-group">
+                <label>Betriebszeit:</label>
+                <p class="form-hint">Zeitfenster, in dem der Roboter gemäß diesem Zeitplan fahren darf. Außerhalb dieser Zeiten wird der Zeitplan nicht ausgeführt.</p>
+                <div class="time-range">
+                    <div>
+                        <label style="font-weight: normal; margin-bottom: 5px;">Von:</label>
+                        <input type="time" id="start-time" value="08:00">
+                    </div>
+                    <div>
+                        <label style="font-weight: normal; margin-bottom: 5px;">Bis:</label>
+                        <input type="time" id="end-time" value="17:00">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options -->
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="schedule-loop">
+                    <span>Zeitplan innerhalb der Betriebszeit wiederholen</span>
+                </label>
+                <p class="form-hint">Wenn aktiviert, werden die ausgewählten Routen innerhalb der Betriebszeit mehrfach nacheinander abgefahren, bis die Endzeit erreicht ist.</p>
+            </div>
+
+            <!-- Active Toggle -->
+            <div class="form-group">
+                <label>Zeitplan sofort aktivieren</label>
+                <p class="form-hint">Bei „aktivieren“ wird der Zeitplan nach dem Speichern direkt vom Roboter übernommen. Bei „deaktivieren“ wird er nur gespeichert und kann später manuell aktiviert werden.</p>
+                <div class="toggle-switch">
+                    <label class="switch">
+                        <input type="checkbox" id="schedule-active" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span style="font-weight: bold;">An / Aus</span>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="button-group">
+                <button class="btn-save" onclick="saveSchedule()">Speichern</button>
+                <button class="btn-cancel" onclick="resetForm()">Zurücksetzen</button>
+            </div>
+        </div>
+
+        <!-- Active Schedules Panel -->
+        <div class="panel">
+            <h2>Aktive Zeitpläne</h2>
+            <div id="schedule-list" class="schedule-list">
+                <p style="color: #888; text-align: center; padding: 20px;">
+                    Keine Zeitpläne vorhanden
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedWeekdays = [];
+        let selectedRoutes = [];
+        let currentRouteMode = 'sequential';
+        let editingScheduleIndex = null;
+        let draggedElement = null;
+        let schedulerBusy = false;   // NEU: blockiert Buttons während Request
+        let fusionRawState = {
+            fusion_status: null,
+            imu_status: null,
+            gnss_status: null,
+            rtk_status: null
+        };
+        // Routen laden
+        async function loadRoutes() {
+            const response = await fetch('/api/routes');
+            const data = await response.json();
+            
+            const select = document.getElementById('route-selector');
+            select.innerHTML = '<option value="">-- Route auswählen --</option>';
+            
+            data.routes.forEach(route => {
+                const option = document.createElement('option');
+                option.value = route;
+                option.textContent = route;
+                select.appendChild(option);
+            });
+        }
+
+        // Route zum Zeitplan hinzufügen
+        function addRouteToSchedule() {
+            const routeName = document.getElementById('route-selector').value;
+            const repeatCount = parseInt(document.getElementById('repeat-count').value);
+            
+            if (!routeName) {
+                alert('Bitte Route auswählen!');
+                return;
+            }
+            
+            if (repeatCount < 1) {
+                alert('Wiederholungen müssen mindestens 1 sein!');
+                return;
+            }
+            
+            // Prüfen ob Route bereits hinzugefügt
+            if (selectedRoutes.some(r => r.route_name === routeName)) {
+                alert('Route bereits hinzugefügt!');
+                return;
+            }
+            
+            selectedRoutes.push({
+                route_name: routeName,
+                repeat_count: repeatCount
+            });
+            
+            updateSelectedRoutesList();
+            
+            // Reset
+            document.getElementById('route-selector').value = '';
+            document.getElementById('repeat-count').value = 1;
+        }
+
+        function setSchedulerUiBusy(isBusy) {
+            schedulerBusy = isBusy;
+
+            // Alle Buttons im Scheduler sperren
+            document.querySelectorAll('.btn-save, .btn-cancel, .btn-edit, .btn-delete, .btn-add-route')
+                .forEach(btn => {
+                    btn.disabled = isBusy;
+                });
+
+            // Status-Badges (AKTIV/INAKTIV) sperren
+            document.querySelectorAll('.status-badge').forEach(badge => {
+                if (isBusy) {
+                    badge.classList.add('disabled');
+                } else {
+                    badge.classList.remove('disabled');
+                }
+            });
+        }
+
+        // Selected Routes Liste aktualisieren
+        function updateSelectedRoutesList() {
+            const container = document.getElementById('selected-routes');
+            
+            if (selectedRoutes.length === 0) {
+                container.className = 'selected-routes-list empty';
+                container.innerHTML = 'Keine Routen ausgewählt';
+                return;
+            }
+            
+            container.className = 'selected-routes-list';
+            container.innerHTML = '';
+            
+            selectedRoutes.forEach((route, idx) => {
+                const item = document.createElement('div');
+                item.className = 'route-item';
+                item.draggable = true;
+                item.dataset.index = idx;
+                
+                item.innerHTML = `
+                    <span class="drag-handle">☰</span>
+                    <div class="route-item-info">
+                        <div class="route-item-name">${route.route_name}</div>
+                        <div class="route-item-repeat">${route.repeat_count}x wiederholen</div>
+                    </div>
+                    <button class="btn-remove-route" onclick="removeRouteFromSchedule(${idx})">🗑️</button>
+                `;
+                
+                // Drag & Drop Event Listeners
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('drop', handleDrop);
+                item.addEventListener('dragend', handleDragEnd);
+                
+                container.appendChild(item);
+            });
+        }
+
+        // Drag & Drop Handlers
+        function handleDragStart(e) {
+            draggedElement = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML);
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            
+            const afterElement = getDragAfterElement(e.currentTarget.parentElement, e.clientY);
+            const dragging = document.querySelector('.dragging');
+            
+            if (afterElement == null) {
+                e.currentTarget.parentElement.appendChild(dragging);
+            } else {
+                e.currentTarget.parentElement.insertBefore(dragging, afterElement);
+            }
+            
+            return false;
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            
+            // Reihenfolge im Array aktualisieren
+            const items = Array.from(document.querySelectorAll('.route-item'));
+            const newOrder = items.map(item => parseInt(item.dataset.index));
+            
+            const reorderedRoutes = newOrder.map(idx => selectedRoutes[idx]);
+            selectedRoutes = reorderedRoutes;
+            
+            updateSelectedRoutesList();
+            
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.route-item:not(.dragging)')];
+            
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Route aus Zeitplan entfernen
+        function removeRouteFromSchedule(idx) {
+            selectedRoutes.splice(idx, 1);
+            updateSelectedRoutesList();
+        }
+
+        // Route Mode wählen
+        function selectRouteMode(mode) {
+            currentRouteMode = mode;
+            
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+        }
+
+        // Wochentag Toggle
+        function toggleWeekday(day) {
+            const btn = document.querySelector(`[data-day="${day}"]`);
+            btn.classList.toggle('active');
+            
+            const idx = selectedWeekdays.indexOf(day);
+            if (idx > -1) {
+                selectedWeekdays.splice(idx, 1);
+            } else {
+                selectedWeekdays.push(day);
+            }
+        }
+
+        // Zeitplan speichern
+       async function saveSchedule() {
+            if (schedulerBusy) return;  // Mehrfachklick verhindern
+
+            const startTime = document.getElementById('start-time').value;
+            const endTime = document.getElementById('end-time').value;
+            const loop = document.getElementById('schedule-loop').checked;
+            const active = document.getElementById('schedule-active').checked;
+                    
+            if (selectedRoutes.length === 0) {
+                alert('Bitte mindestens eine Route hinzufügen!');
+                return;
+            }
+                    
+            if (selectedWeekdays.length === 0) {
+                alert('Bitte mindestens einen Wochentag auswählen!');
+                return;
+            }
+
+            const scheduleData = {
+                routes: selectedRoutes,
+                route_mode: currentRouteMode,
+                weekdays: selectedWeekdays,
+                start_time: startTime,
+                end_time: endTime,
+                loop: loop,
+                require_home_return: true,  // Always true
+                active: active
+            };
+
+            setSchedulerUiBusy(true);
+
+            try {
+                let response;
+                if (editingScheduleIndex !== null) {
+                    response = await fetch(`/api/schedule/edit/${editingScheduleIndex}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(scheduleData)
+                    });
+                } else {
+                    response = await fetch('/api/schedule/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(scheduleData)
+                    });
+                }
+                    
+                const data = await response.json();
+
+                // Backend antwortet nur "success", wenn ACK vom Roboter kam
+                if (data.status === 'success') {
+                    alert('✅ Zeitplan gespeichert!');
+                    resetForm();
+                    loadSchedules();
+                } else {
+                    alert('❌ Fehler: ' + data.message);
+                }
+            } catch (e) {
+                alert('❌ Fehler: ' + e.message);
+            } finally {
+                setSchedulerUiBusy(false);
+            }
+        }
+
+
+        // Zeitpläne laden
+        async function loadSchedules() {
+            // Add cache-busting parameter to ensure fresh data
+            const response = await fetch(`/api/schedule/schedules?t=${Date.now()}`);
+            const data = await response.json();
+            
+            const listDiv = document.getElementById('schedule-list');
+            
+            if (data.schedules.length === 0) {
+                listDiv.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">Keine Zeitpläne vorhanden</p>';
+                return;
+            }
+            
+            const weekdayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+            
+            listDiv.innerHTML = '';
+            data.schedules.forEach((schedule, idx) => {
+                const days = schedule.weekdays.map(d => weekdayNames[d]).join(', ');
+                const modeIcon = schedule.route_mode === 'random' ? '🎲' : '🔢';
+                const routesList = schedule.routes.map(r => 
+                    `${r.route_name} (${r.repeat_count}x)`
+                ).join(', ');
+                
+                // Ensure loop field is properly checked (handle both 'loop' and 'loop_mode' for backward compatibility)
+                // Check both field names since YAML might have either
+                const loopField = schedule.loop !== undefined ? schedule.loop : schedule.loop_mode;
+                const loopValue = loopField === true || loopField === 'true' || loopField === 1 || loopField === '1';
+                
+                const item = document.createElement('div');
+                item.className = 'schedule-item';
+                item.innerHTML = `
+                    <div class="schedule-info">
+                        <h4>
+                            ${modeIcon} ${schedule.routes.length} Route(n)
+                            <span class="status-badge ${schedule.active ? 'status-active' : 'status-inactive'}" 
+                                  onclick="toggleSchedule(${idx})">
+                                ${schedule.active ? 'AKTIV' : 'INAKTIV'}
+                            </span>
+                        </h4>
+                        <div class="route-details">
+                            <div class="route-details-item">📍 Routen: ${routesList}</div>
+                            <div class="route-details-item">📅 ${days}</div>
+                            <div class="route-details-item">🕒 ${schedule.start_time} - ${schedule.end_time}</div>
+                            <div class="route-details-item">🔄 Wiederholen: ${loopValue ? 'Ja' : 'Nein'}</div>
+                        </div>
+                    </div>
+                    <div class="schedule-actions">
+                        <button class="btn-small btn-edit" onclick="editSchedule(${idx})">✏️ Bearbeiten</button>
+                        <button class="btn-small btn-delete" onclick="deleteSchedule(${idx})">🗑️ Löschen</button>
+                    </div>
+                `;
+                listDiv.appendChild(item);
+            });
+        }
+
+        // Zeitplan bearbeiten
+        async function editSchedule(idx) {
+            const response = await fetch('/api/schedule/schedules');
+            const data = await response.json();
+            const schedule = data.schedules[idx];
+            
+            editingScheduleIndex = idx;
+            
+            // Form füllen
+            selectedRoutes = [...schedule.routes];
+            updateSelectedRoutesList();
+            
+            selectRouteMode(schedule.route_mode);
+            
+            selectedWeekdays = [...schedule.weekdays];
+            document.querySelectorAll('.weekday-btn').forEach(btn => {
+                const day = parseInt(btn.dataset.day);
+                if (selectedWeekdays.includes(day)) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            document.getElementById('start-time').value = schedule.start_time;
+            document.getElementById('end-time').value = schedule.end_time;
+            // Handle both 'loop' and 'loop_mode' field names for backward compatibility
+            const loopField = schedule.loop !== undefined ? schedule.loop : schedule.loop_mode;
+            document.getElementById('schedule-loop').checked = loopField || false;
+            document.getElementById('schedule-active').checked = schedule.active;
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            alert('📝 Zeitplan wird bearbeitet. Änderungen speichern um zu aktualisieren.');
+        }
+
+        // Zeitplan Status togglen
+        async function toggleSchedule(idx) {
+            if (schedulerBusy) return;
+
+            setSchedulerUiBusy(true);
+
+            try {
+                const response = await fetch(`/api/schedule/toggle/${idx}`, { method: 'POST' });
+                const data = await response.json();
+                    
+                if (data.status === 'success') {
+                    loadSchedules();
+                } else {
+                    alert('❌ Fehler: ' + data.message);
+                }
+            } catch (e) {
+                alert('❌ Fehler: ' + e.message);
+            } finally {
+                setSchedulerUiBusy(false);
+            }
+        }
+
+
+        // Zeitplan löschen
+        async function deleteSchedule(idx) {
+            if (schedulerBusy) return;
+            if (!confirm('Zeitplan wirklich löschen?')) return;
+
+            setSchedulerUiBusy(true);
+
+            try {
+                const response = await fetch(`/api/schedule/delete/${idx}`, { method: 'DELETE' });
+                const data = await response.json();
+                    
+                if (data.status === 'success') {
+                    loadSchedules();
+                } else {
+                    alert('❌ Fehler: ' + data.message);
+                }
+            } catch (e) {
+                alert('❌ Fehler: ' + e.message);
+            } finally {
+                setSchedulerUiBusy(false);
+            }
+        }
+
+
+        // Formular zurücksetzen
+        function resetForm() {
+            selectedRoutes = [];
+            updateSelectedRoutesList();
+            
+            currentRouteMode = 'sequential';
+            selectRouteMode('sequential');
+            
+            selectedWeekdays = [];
+            document.querySelectorAll('.weekday-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.getElementById('route-selector').value = '';
+            document.getElementById('repeat-count').value = 1;
+            document.getElementById('start-time').value = '08:00';
+            document.getElementById('end-time').value = '17:00';
+            document.getElementById('schedule-loop').checked = false;
+            document.getElementById('schedule-active').checked = true;
+            
+            editingScheduleIndex = null;
+        }
+
+        // Log management - save to localStorage (logs are only displayed on index.html)
+        const MAX_STORED_LOGS = 100;
+
+        function addLogEntry(entry) {
+            // On non-index pages, only save to localStorage, don't display
+            // Get current logs from storage
+            let logs = [];
+            try {
+                const storedLogs = localStorage.getItem('robot_logs');
+                if (storedLogs) {
+                    logs = JSON.parse(storedLogs);
+                }
+            } catch (e) {
+                console.error('Failed to load logs from storage:', e);
+            }
+
+            // Handle connection status messages
+            if (entry.connection_status !== undefined) {
+                if (entry.connection_status === false) {
+                    // Add disconnected message
+                    logs.unshift({
+                        timestamp: entry.timestamp,
+                        message: entry.message,
+                        isError: true,
+                        connection_status: false,
+                        count: 1
+                    });
+                } else {
+                    // Remove disconnected messages when connected
+                    logs = logs.filter(log => log.connection_status !== false);
+                }
+            } else {
+                // Regular log entry - check for duplicates
+                const messageKey = entry.message + '|' + (entry.isError ? 'error' : 'info');
+                const existingIndex = logs.findIndex(log => 
+                    log.message === entry.message && 
+                    log.isError === (entry.isError || false) &&
+                    log.connection_status === undefined
+                );
+
+                if (existingIndex !== -1) {
+                    // Increment count and move to front (newest first)
+                    const existingLog = logs[existingIndex];
+                    existingLog.count++;
+                    existingLog.timestamp = entry.timestamp;
+                    // Remove from current position and add to front
+                    logs.splice(existingIndex, 1);
+                    logs.unshift(existingLog);
+                } else {
+                    // Add new entry at the front
+                    logs.unshift({
+                        timestamp: entry.timestamp,
+                        message: entry.message,
+                        isError: entry.isError || false,
+                        count: 1
+                    });
+                }
+            });
+        });
+    </script>
+    <script src="/static/js/scheduler.js"></script>
+<!-- Gemeinsame Scripts -->
+<script src="/static/js/common.js"></script>
+</body>
+</html>

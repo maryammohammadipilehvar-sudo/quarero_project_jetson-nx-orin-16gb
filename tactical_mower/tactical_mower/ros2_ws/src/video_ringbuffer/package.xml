@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>video_ringbuffer</name>
+  <version>0.0.1</version>
+  <description>Video ringbuffer node for security event recording</description>
+
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>interfaces</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
+
+

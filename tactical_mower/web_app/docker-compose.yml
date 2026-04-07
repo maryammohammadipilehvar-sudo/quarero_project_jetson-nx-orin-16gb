@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  robot-web:
+    # Build context is web_app/ directory
+    # Static files (static/, media/) are copied into image during build
+    build: .
+    container_name: web_app
+    ports:
+      - "8020:8020"
+    network_mode: host
+    ipc: host
+    pid: host
+    privileged: true
+    volumes:
+      # ROS2 Domain ID shared memory
+      - /dev/shm:/dev/shm
+      # Routes stored on host system
+      - /home/quarero/gits/routen:/data
+      # ROS2 workspace (mounted for development, code changes require rebuild)
+      - /home/quarero/gits/tactical_mower/web_app/ros2_ws:/app/ros2_ws
+      # Optional: Mount static files for development (uncomment to enable live editing)
+      # - /home/ai-robotic/gits/dev_web_app/web_app/static:/app/static:ro
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - PYTHONUNBUFFERED=1
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/tmp/fastdds.xml
+      - ROS_LOCALHOST_ONLY=0
+    command: bash -c "source /opt/ros/jazzy/setup.bash && cd ros2_ws/ && colcon build --packages-ignore fpsdk_ros1 ros1_fpsdk_demo fixposition_driver_ros1 && source /app/ros2_ws/install/setup.bash && /app/ros2_ws/install/robot_web_interface/bin/robot_web_interface"
+    restart: unless-stopped 

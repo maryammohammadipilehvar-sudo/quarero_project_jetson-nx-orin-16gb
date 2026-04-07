@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einstellungen – Robotersteuerung</title>
+    <link rel="stylesheet" href="/static/css/common.css" />
+    <link rel="stylesheet" href="/static/css/settings.css" />
+</head>
+<body>
+    <div class="navbar">
+        <div class="nav-links">
+            <a href="/" class="nav-link"><span class="nav-text">Dashboard</span></a>
+            <a href="/control" class="nav-link"><span class="nav-text">Manuelle<br>Steuerung</span></a>
+            <a href="/scheduler" class="nav-link"><span class="nav-text">Zeitpläne</span></a>
+            <a href="/events" class="nav-link"><span class="nav-text">Ereignisse</span></a>
+            <a href="/settings" class="nav-link active"><span class="nav-text">Einstellungen</span></a>
+        </div>
+
+        <div class="nav-status-group">
+            <div id="badge-gnss1" class="status-badge">
+                <span class="badge-label">GNSS1</span>
+            </div>
+            <div id="badge-gnss2" class="status-badge">
+                <span class="badge-label">GNSS2</span>
+            </div>
+            <div id="badge-imu" class="status-badge">
+                <span class="badge-label">IMU</span>
+            </div>
+            <div id="badge-fusion" class="status-badge status-badge-fusion">
+                <span class="badge-label">Fusion</span>
+            </div>
+        </div>
+        <!-- Connection Status Indicator -->
+        <div id="robot-connection-status" class="robot-connection-status" style="display: none;">
+            <span class="connection-text">Keine Verbindung zum Roboter</span>
+        </div>
+        <div class="navbar-right">
+            <img src="/static/media/logo.svg" alt="Quarero">
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="settings-grid">
+            <!-- Home Position Panel -->
+            <div class="panel">
+                <h2>Ladestation &amp; Home-Position</h2>
+                <div class="info-box">
+                    <strong>Charge Point:</strong> Position der Ladestation. <strong>Home Point:</strong> Wird automatisch 2 m rückwärts vom Charge Point berechnet (Startpunkt für Routen).
+                </div>
+                
+                <div class="status-card" id="current-position-card">
+                    <div class="status-content">
+                        <div class="status-label-small">Aktuelle Roboterposition</div>
+                        <div class="status-value-large" id="current-position" style="font-size: 1em;">
+                            Warte auf GPS-Daten …
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Charge Point (Ladestation)</label>
+                    <p class="form-hint">Position, an der der Roboter geladen wird. Mit „Aktuelle Position als Ladestation“ die aktuelle GPS-Position übernehmen.</p>
+                    <div id="charge-point-display" class="coord-display empty">
+                        Noch nicht gesetzt
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Home Point (Routenstart, 2 m rückwärts)</label>
+                    <p class="form-hint">Wird automatisch 2 m rückwärts vom Charge Point berechnet und dient als Startpunkt für alle Routen.</p>
+                    <div id="home-point-display" class="coord-display empty">
+                        Noch nicht gesetzt
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="setCurrentAsCharge()">Aktuelle Position als Ladestation</button>
+                    <button class="btn-save" onclick="saveHomePosition()">Speichern</button>
+                </div>
+
+                <div id="home-success" class="success-message">
+                    Ladestation und Home-Position wurden gespeichert.
+                </div>
+            </div>
+
+            <!-- Battery Settings Panel -->
+            <div class="panel">
+                <h2>Akku</h2>
+                <div class="info-box">
+                    Schwellwert, ab dem der Roboter automatisch zur Ladestation zurückkehrt.
+                </div>
+
+                <div class="battery-slider-container">
+                    <div class="battery-value-display">
+                        <span id="battery-threshold-display">20</span><span class="unit">%</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Akku-Schwellwert für Rückkehr zur Ladestation:</label>
+                        <p class="form-hint">Empfohlen: 15–25 %. Bei höherem Wert kehrt der Roboter früher zurück, bei niedrigerem Wert bleibt er länger im Einsatz.</p>
+                        <div class="slider-container">
+                            <input type="range" 
+                                   id="battery-threshold" 
+                                   class="battery-slider" 
+                                   min="5" 
+                                   max="50" 
+                                   value="20" 
+                                   step="1"
+                                   oninput="updateBatteryDisplay()">
+                            <div class="slider-labels">
+                                <span>5%</span>
+                                <span>25%</span>
+                                <span>50%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="battery-warning">
+                        Bei Unterschreiten wird die aktuelle Aufgabe unterbrochen und der Roboter kehrt zur Ladestation zurück.
+                    </div>
+                </div>
+
+                <div class="status-card" id="current-battery-card">
+                    <div class="status-content">
+                        <div class="status-label-small">Aktueller Akkustand</div>
+                        <div class="status-value-large" id="current-battery">—%</div>
+                    </div>
+                </div>
+
+                <button class="btn-save" onclick="saveBatterySettings()" style="width: 100%;">Speichern</button>
+
+                <div id="battery-success" class="success-message">
+                    Akku-Einstellungen wurden gespeichert.
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Settings Panel (full width) -->
+        <div class="panel">
+            <h2>Erweiterte Einstellungen</h2>
+            <div class="info-box">
+                Weitere System- und Fahrparameter.
+            </div>
+
+            <div class="form-group">
+                <label>Maximalgeschwindigkeit:</label>
+                <p class="form-hint">Maximale Fahrgeschwindigkeit des Roboters.</p>
+                <div class="battery-slider-container">
+                    <div class="battery-value-display">
+                        <span id="speed-factor-display">2.6</span><span class="unit">km/h</span>
+                    </div>
+
+                    <div class="slider-container">
+                        <input type="range"
+                            id="speed-factor"
+                            class="battery-slider-reversed"
+                            min="0.38"
+                            max="1.52"
+                            step="0.038"
+                            value="1.0"
+                            oninput="updateSpeedDisplay()">
+                        <div class="slider-labels">
+                            <span>1.0 km/h</span>
+                            <span>2.5 km/h</span>
+                            <span>4.0 km/h</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="auto-charge-return">
+                    Automatische Rückkehr bei niedrigem Akku aktivieren
+                </label>
+                <p class="form-hint">Bei Deaktivierung muss die Rückkehr zur Ladestation manuell ausgelöst werden.</p>
+            </div>
+
+            <div class="form-group">
+                <label>Maximale Distanz zur Route für Heimkehr (Meter):</label>
+                <p class="form-hint">Maximale Entfernung, in der der Roboter auf eine Route zufahren darf, um nach Hause zurückzukehren. Bei größerer Entfernung erfolgt keine automatische Heimkehr über die Route.</p>
+                <input type="number" 
+                       id="max-route-distance" 
+                       min="1.0" 
+                       max="100.0" 
+                       step="0.1" 
+                       value="3.0">
+            </div>
+
+            <div class="form-group">
+                <label>Waypoint erreicht Schwellenwert (Meter):</label>
+                <p class="form-hint">Distanz-Schwellenwert, bei dem ein Waypoint als erreicht gilt. Kleinere Werte erfordern präzisere Navigation, größere Werte sind toleranter.</p>
+                <input type="number" 
+                       id="waypoint-tolerance" 
+                       min="0.1" 
+                       max="5.0" 
+                       step="0.1" 
+                       value="0.5">
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable-obstacle-avoidance">
+                    Hinderniserkennung aktivieren
+                </label>
+                <p class="form-hint">
+                    Bei Deaktivierung fährt der Roboter ohne Hinderniserkennung und kann mit Hindernissen kollidieren. Dies kann zu Sach- und Personenschäden führen und ist daher nur zu Testzwecken und unter ständiger Aufsicht empfohlen.
+                </p>
+            </div>
+
+            <button class="btn-save" onclick="saveAdvancedSettings()" style="width: 100%;">Speichern</button>
+
+            <div id="advanced-success" class="success-message">
+                Erweiterte Einstellungen wurden gespeichert.
+            </div>
+        </div>
+
+        <!-- Security / Alert Settings Panel (full width) -->
+        <div class="panel">
+            <h2>E-Mail-Benachrichtigungen</h2>
+            <div class="info-box">
+                SMTP-Einstellungen für Alarm-E-Mails. Zeitfenster werden auf der Seite „Ereignisse“ konfiguriert.
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="security-email-enabled">
+                    E-Mail-Benachrichtigungen aktivieren
+                </label>
+                <p class="form-hint">Bei aktivierten E-Mail-Benachrichtigungen werden bei konfigurierten Alarmen E-Mails an die angegebenen Empfänger gesendet. Zeitfenster für Alarme auf der Seite „Ereignisse“ einstellen.</p>
+            </div>
+
+            <div class="form-group">
+                <label>SMTP Host:</label>
+                <p class="form-hint">Servername des SMTP-Anbieters, z. B. smtp.gmail.com oder smtp.office365.com.</p>
+                <input type="text" id="security-smtp-host">
+            </div>
+
+            <div class="form-group">
+                <label>SMTP Port:</label>
+                <p class="form-hint">Üblich: 587 (TLS), 465 (SSL) oder 25 (unverschlüsselt). Bei TLS aktiviert in der Regel 587.</p>
+                <input type="number" id="security-smtp-port" value="587">
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="security-use-tls" checked>
+                    TLS verwenden
+                </label>
+                <p class="form-hint">TLS verschlüsselt die Verbindung zum SMTP-Server. Für die meisten Anbieter empfohlen.</p>
+            </div>
+
+            <div class="form-group">
+                <label>SMTP Benutzername:</label>
+                <p class="form-hint">In der Regel Ihre vollständige E-Mail-Adresse oder der vom Anbieter vergebene Benutzername.</p>
+                <input type="text" id="security-username">
+            </div>
+
+            <div class="form-group">
+                <label>SMTP Passwort:</label>
+                <p class="form-hint">Passwort leer lassen, um den bereits gespeicherten Wert beizubehalten. Bei einigen Anbietern wird ein „App-Passwort“ statt des normalen Passworts benötigt.</p>
+                <input type="password" id="security-password" placeholder="Unverändert lassen zum Beibehalten">
+            </div>
+
+            <div class="form-group">
+                <label>Absender-Adresse:</label>
+                <p class="form-hint">E-Mail-Adresse, die als Absender in den Benachrichtigungen erscheint. Sollte vom SMTP-Server akzeptiert werden.</p>
+                <input type="text" id="security-sender">
+            </div>
+
+            <div class="form-group">
+                <label>Empfänger (Kommagetrennt):</label>
+                <p class="form-hint">E-Mail-Adressen der Empfänger, durch Komma getrennt. Alle angegebenen Adressen erhalten die Alarm-Benachrichtigungen.</p>
+                <input type="text" id="security-recipients" placeholder="user1@example.com, user2@example.com">
+            </div>
+
+
+            <div class="form-group">
+                <label>Aufnahmefenster um Ereignis (Sekunden):</label>
+                <p class="form-hint">Wie viele Sekunden Video vor (X) bzw. nach (Y) dem auslösenden Ereignis in den Videoclips enthalten sein sollen. Größere Werte ergeben längere Clips.</p>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                    <div>
+                        <span>Vor dem Ereignis (X):</span>
+                        <input type="number" id="security-pre-seconds" min="1" max="120" value="10">
+                    </div>
+                    <div>
+                        <span>Nach dem Ereignis (Y):</span>
+                        <input type="number" id="security-post-seconds" min="1" max="120" value="10">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-save" onclick="saveSecuritySettings()" style="width: 100%;">Speichern</button>
+
+            <div id="security-success" class="success-message">
+                E-Mail-Einstellungen wurden gespeichert.
+            </div>
+        </div>
+
+        <!-- Restore Settings Panel -->
+        <div class="panel">
+            <h2>Einstellungen zurücksetzen</h2>
+            <div class="info-box">
+                <strong>Hinweis:</strong> Die ausgewählten Einstellungen werden unwiderruflich gelöscht.
+            </div>
+            <button class="btn-danger" onclick="openRestoreModal()" style="width: 100%;">Zurücksetzen</button>
+        </div>
+    </div>
+
+    <!-- Home Position Warning Modal -->
+    <div id="home-position-modal" class="modal-overlay" onclick="closeHomePositionModalOnOverlay(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">Ladestation ändern</div>
+            
+            <div class="modal-warning">
+                Das Ändern der Ladestation bzw. Home-Position löscht unwiderruflich alle Zeitpläne und Routen.
+            </div>
+
+            <div style="margin-bottom: 20px; color: #666;">
+                <p style="margin-bottom: 10px;">Diese Aktion ist notwendig, weil:</p>
+                <ul style="margin-left: 20px; line-height: 1.6;">
+                    <li>Alle Routen starten vom Home Point</li>
+                    <li>Zeitpläne sind an Routen gebunden</li>
+                    <li>Bei einer neuen Position sind die alten Routen nicht mehr gültig</li>
+                </ul>
+            </div>
+
+            <div id="home-position-info" class="modal-info-box">
+                <div class="modal-info-label">Neue Ladestation:</div>
+                <div id="new-charge-point-display" class="modal-info-value"><!-- dynamisch --></div>
+            </div>
+
+            <p class="modal-confirm-text">Fortfahren? Alle Zeitpläne und Routen werden gelöscht.</p>
+
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeHomePositionModal()">Abbrechen</button>
+                <button class="btn-danger" onclick="confirmSaveHomePosition()">Bestätigen und Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Modal -->
+    <div id="restore-modal" class="modal-overlay" onclick="closeRestoreModalOnOverlay(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">Einstellungen zurücksetzen</div>
+            
+            <div class="modal-warning">
+                Die ausgewählten Einstellungen werden unwiderruflich gelöscht.
+            </div>
+
+            <!-- Step 1: Selection -->
+            <div id="restore-step-1" class="confirmation-step active">
+                <p style="margin-bottom: 20px;">Bitte wählen Sie aus, welche Einstellungen gelöscht werden sollen:</p>
+                
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="restore-home-position" onchange="updateRestoreDependencies()">
+                        <span class="checkbox-label-text">Ladestation & Home Position</span>
+                    </label>
+                    <div class="checkbox-dependency-note" id="restore-home-note" style="display: none;">
+                        (Löscht automatisch auch Schedules und Routen)
+                    </div>
+                </div>
+
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="restore-schedules" disabled onchange="updateRestoreDependencies()">
+                        <span class="checkbox-label-text">Schedules</span>
+                    </label>
+                    <div class="checkbox-dependency-note" id="restore-schedules-note" style="display: none;">
+                        (Wird automatisch gelöscht, da abhängig von Home Position oder Routen)
+                    </div>
+                </div>
+
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="restore-routes" onchange="updateRestoreDependencies()">
+                        <span class="checkbox-label-text">Routen</span>
+                    </label>
+                    <div class="checkbox-dependency-note" id="restore-routes-note" style="display: none;">
+                        (Löscht automatisch auch Schedules)
+                    </div>
+                </div>
+
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="restore-advanced" onchange="updateRestoreDependencies()">
+                        <span class="checkbox-label-text">Erweiterte Einstellungen</span>
+                    </label>
+                </div>
+
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="restore-email" onchange="updateRestoreDependencies()">
+                        <span class="checkbox-label-text">E-Mail Einstellungen (Sicherheitsbenachrichtigungen)</span>
+                    </label>
+                </div>
+
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="restore-alarm" onchange="updateRestoreDependencies()">
+                        <span class="checkbox-label-text">Alarm Einstellungen (Alarm Seite)</span>
+                    </label>
+                </div>
+
+                <div class="modal-buttons">
+                    <button class="btn-cancel" onclick="closeRestoreModal()">Abbrechen</button>
+                    <button class="btn-danger" onclick="proceedToConfirmation()" id="restore-proceed-btn" disabled>Weiter</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Confirmation -->
+            <div id="restore-step-2" class="confirmation-step">
+                <p style="margin-bottom: 20px;">Zur Bestätigung bitte „LÖSCHEN“ eingeben:</p>
+                <input type="text" id="restore-confirmation-input" class="confirmation-input" placeholder="LÖSCHEN" oninput="checkConfirmationInput()">
+                <div class="modal-buttons" style="margin-top: 20px;">
+                    <button class="btn-cancel" onclick="backToSelection()">Zurück</button>
+                    <button class="btn-danger" onclick="confirmRestore()" id="restore-confirm-btn" disabled>Bestätigen und Löschen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/settings.js"></script>
+<!-- Gemeinsame Scripts -->
+<script src="/static/js/common.js"></script>
+</body>
+</html>

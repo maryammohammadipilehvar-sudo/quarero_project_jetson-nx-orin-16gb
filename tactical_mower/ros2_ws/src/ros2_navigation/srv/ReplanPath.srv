@@ -1,0 +1,11 @@
+# Request
+nav_msgs/Path path  # Path to check for collisions
+geometry_msgs/PoseStamped goal_pose  # Goal pose (for replanning if collision detected)
+int32 start_waypoint_index  # Start checking from this waypoint index (0 = from beginning)
+---
+# Response
+bool path_found  # True if new path was found (only set if collision was detected and replanning succeeded)
+nav_msgs/Path path  # New path (empty if no collision or replanning failed)
+bool has_collision  # True if collision was detected in the path
+string message  # Status message
+

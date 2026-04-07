@@ -1,0 +1,9 @@
+# Command control service
+# Request
+string command_id    # Unique command identifier
+bool state           # Desired state (true/false)
+---
+# Response
+bool success         # Whether command was successful
+string message       # Status message
+

@@ -1,0 +1,44 @@
+########################################################################################################################
+# ___    ___
+# \  \  /  /
+#  \  \/  /   Copyright (c) Fixposition AG (www.fixposition.com) and contributors
+#  /  /\  \   License: see the LICENSE file
+# /__/  \__\
+#
+########################################################################################################################
+
+# Debian 13 Trixie
+FROM debian:trixie
+
+# Metadata for github packages
+LABEL org.opencontainers.image.description="Fixposition SDK docker image: Debian Trixie 13 base image with minimal stuff required to build"
+LABEL org.opencontainers.image.source=https://github.com/fixposition
+
+# Variables used in our Docker build and CI scripts
+ENV FPSDK_IMAGE=trixie-base
+ENV ROS_DISTRO=
+
+# Install stuff
+COPY docker/scripts/install_apt_base.sh /tmp
+RUN /tmp/install_apt_base.sh && rm -f /tmp/install_apt_base.sh
+
+# Download, build and install Doxygen
+COPY docker/scripts/install_doxygen.sh /tmp
+RUN /tmp/install_doxygen.sh && rm -f /tmp/install_doxygen.sh
+
+# Update ld cache for the installed libraries
+RUN /usr/sbin/ldconfig
+
+# Prevent packages from installation that we build and installed above. Installing multiple versions of the same package
+# can be tricky and we better prevent that from happening. It doesn't work for all packages, though. For example,
+# ROS packages insist on libgtest.
+COPY <<EOF /etc/apt/preferences.d/manually-built-and-installed
+Package: doxygen doxygen-*
+Pin: origin *
+Pin-Priority: -1
+EOF
+
+# For automation and debugging docker builds... (last layer!)
+RUN date > /fixposition-sdk-${FPSDK_IMAGE}
+
+########################################################################################################################

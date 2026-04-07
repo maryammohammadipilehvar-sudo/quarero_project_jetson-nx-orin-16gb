@@ -1,0 +1,71 @@
+FROM arm64v8/ros:jazzy-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=jazzy
+
+# Configure apt for better reliability (longer timeouts, retries)
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::https::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries
+
+# Basic tools (lighter packages first, so they get cached)
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-colcon-common-extensions \
+    cmake \
+    build-essential \
+    git \
+    libasio-dev \
+    libboost-system-dev \
+    nano \
+    tree \
+    screen \
+    python3-numpy \
+    libtinyxml2-dev \
+    libyaml-cpp-dev \
+    iputils-ping \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Heavy packages with many dependencies (separate layer for better caching)
+RUN apt-get update && apt-get install -y \
+    python3-opencv \
+    ros-${ROS_DISTRO}-pcl-conversions \
+    ros-${ROS_DISTRO}-pcl-msgs \
+    ros-${ROS_DISTRO}-pcl-ros \
+    libpcl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+# Install Livox-SDK2 to provide liblivox_lidar_sdk_shared.so for livox_ros_driver2
+RUN git clone https://github.com/tu-darmstadt-ros-pkg/Livox-SDK2.git && \
+    cd ./Livox-SDK2/ && \
+    # Patch missing includes for GCC 13
+    sed -i '1i #include <cstdint>' sdk_core/logger_handler/file_manager.h && \
+    sed -i '1i #include <cstdint>' sdk_core/comm/define.h && \
+    mkdir build && \
+    cd build && \
+    cmake .. && make -j1 && \
+    sudo make install
+
+WORKDIR /livox/ros2_ws
+
+# Copy wait script for LiDAR availability
+COPY docker/wait_for_lidar.sh /usr/local/bin/wait_for_lidar.sh
+RUN chmod +x /usr/local/bin/wait_for_lidar.sh
+
+# Placeholder for optional Python requirements file if you want it later
+# COPY requirements-ros2_livox.txt /tmp/requirements.txt
+# RUN pip3 install --no-cache-dir --ignore-installed -r /tmp/requirements.txt --break-system-packages && \
+#     rm /tmp/requirements.txt
+
+SHELL ["/bin/bash", "-c"]
+
+# Source ROS 2 jazzy and future local workspace in bashrc
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
+    echo "[ -f /livox/ros2_ws/install/setup.bash ] && source /livox/ros2_ws/install/setup.bash" >> ~/.bashrc
+
+CMD ["bash", "-c", "source /opt/ros/${ROS_DISTRO}/setup.bash && exec bash"]
+
+

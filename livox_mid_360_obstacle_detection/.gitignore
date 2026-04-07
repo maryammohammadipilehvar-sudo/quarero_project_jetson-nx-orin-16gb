@@ -1,0 +1,16 @@
+build/
+install/
+log/
+
+__pycache__/
+*.pyc
+.venv*
+.aider*
+.vscode/
+.github/
+
+*.egg
+*.egg-info
+
+.cursor/
+ros2_ws/ros_bags/

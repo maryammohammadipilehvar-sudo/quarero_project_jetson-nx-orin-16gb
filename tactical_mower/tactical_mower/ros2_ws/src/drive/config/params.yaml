@@ -1,0 +1,36 @@
+robot_controller:
+  ros__parameters:
+    wheel_diameter: 0.535
+    wheel_base: 0.637
+    flip_steering: true
+    topic_input: "/joy_drive_raw"
+    topic_output: "/cmd_drive"
+    topic_tactical_enable: "/tactical_mode_toggle"
+    topic_geopath: "/geopath"
+    topic_robot_state: "/robot/state"
+    topic_fixposition_speed: "/fixposition/speed"
+    topic_light_control: "/control/light"
+    uart_port: "/dev/ttyTHS1"
+    uart_baudrate: 19200
+    settings_file: "/routen/settings/settings.yaml"
+
+roboclaw_wrapper:
+  ros__parameters:
+    drive_acceleration_factor: 0.8        # scaling factor for acceleration
+    velocity_timeout: 2.0                 # max time [s] before motors stop without new command
+    baud_rate: 115200
+    device: "/dev/ttyACM0"
+    addresses: [128]                 # left and right motor controllers
+    duty_mode: true                       # use duty mode for motor commands
+    velocity_qpps_to_duty_factor: 3000       # conversion factor from rad/s to duty
+
+    roboclaw_mapping:
+      drive_left:
+        address: 128
+        channel: M1
+        flip: true
+
+      drive_right:
+        address: 128
+        channel: M2
+        flip: true

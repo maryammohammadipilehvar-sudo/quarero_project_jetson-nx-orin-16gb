@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>eneo_event_publisher</name>
+  <version>0.0.1</version>
+  <description>Eneo-Kamera Event Publisher - Empfängt UDP Events und publiziert SecurityAlert Nachrichten</description>
+
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>interfaces</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>video_ringbuffer</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
+

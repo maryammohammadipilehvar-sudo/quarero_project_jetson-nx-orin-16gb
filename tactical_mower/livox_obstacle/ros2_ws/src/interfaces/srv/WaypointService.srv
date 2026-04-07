@@ -1,0 +1,11 @@
+# Waypoint service for route navigation
+# Request
+string command_id                    # Unique command identifier
+string route_name                    # Name of the route (optional)
+geometry_msgs/Point[] waypoints      # List of waypoints (x=lat, y=lon, z=alt)
+uint8 mode                           # 0=STOP, 1=LOOP, 2=PING_PONG
+---
+# Response
+bool success                         # Whether command was successful
+string message                       # Status message
+

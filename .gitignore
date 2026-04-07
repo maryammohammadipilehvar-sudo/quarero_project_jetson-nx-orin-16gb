@@ -1,0 +1,12 @@
+**/venv/
+**/.venv/
+**/pypackages/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.log
+**/*.pt
+**/build/
+**/install/
+**/log/
+**/.DS_Store

@@ -1,0 +1,42 @@
+nav2_navigation_node:
+  ros__parameters:
+    # Time Configuration
+    # Set to true when using simulation (Gazebo), false for real robot
+    use_sim_time: false
+    
+    # Topics
+    occupancy_grid_topic: "/obstacles/lidar"  # OccupancyGrid from livox_mid360_obstacle node
+    planned_path_topic: "planned_path"
+    
+    # Frames
+    robot_base_frame: "base_footprint"  # Frame for robot pose queries (for navigation, z=0 on ground)
+    global_frame: "map"  # Global frame for goals and paths (aligned with FP_ENU0 from Fixposition Driver)
+    
+    # Planner
+    planner_plugin: "nav2_smac_planner::SmacPlanner2D"
+    planner_frequency: 1.0
+    
+    # Path Planning Algorithm
+    # Options: "astar" (A*), "theta_star" (Theta*)
+    algorithm_type: "theta_star"
+    
+    # Grid Extension
+    grid_extension_distance: 5.0
+    grid_extension_resolution: 0.1
+    
+    # Error Handling
+    max_planning_time: 5.0
+    tf_timeout: 2.0  # Increased timeout to handle delayed/stale transforms (default was 1.0)
+    
+    # Obstacle Avoidance
+    inflation_radius: 1.3 # meters - distance to keep from obstacles (0.0 to disable)
+    inflated_grid_topic: "inflated_occupancy_grid"  # Topic for RViz visualization
+    inflated_grid_update_rate: 0.0  # Hz - rate for continuous inflated grid updates (0.0 to disable)
+    
+    # Replanning Service
+    replanning_service_name: "replan_path"  # Name of the replanning service
+    replanning_grid_topic: "inflated_occupancy_grid"  # Grid topic for replanning (use inflated grid for safety margin)
+    
+    # Grid Transformation
+    auto_transform_grid: true  # Automatically transform grids from their frame to global_frame (map)
+

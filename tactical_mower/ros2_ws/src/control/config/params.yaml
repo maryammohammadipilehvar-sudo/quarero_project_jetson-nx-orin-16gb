@@ -1,0 +1,98 @@
+joy_controller:
+  ros__parameters:
+    port: "/dev/ttyTHS1"
+    baudrate: 19200
+    topic_output: "/joy_drive_raw"
+    topic_light_control: "/control/light"
+    topic_charging_control: "/control/enable_charging"
+
+tactical_wp_follower:
+  ros__parameters:
+    settings_file: "/routen/settings/settings.yaml"
+    routes_dir: "/routen/routes"
+    control_frequency: 10.0
+    max_steering: 100.0
+    replan_check_interval: 3.0  # [s] Interval between path collision checks (<=0 for continuous checking)
+    tf_timeout: 1.0  # [s] Timeout for TF lookups
+    
+    # Transform offsets (for static TF publishing)
+    transforms:
+      vrtk_to_base:
+        x: 0.18  # [m] Offset from vrtk_link to base_link
+        y: 0.0
+        z: 0.45
+      vrtk_to_base_footprint:
+        x: 0.18  # [m] Offset from vrtk_link to base_footprint (same as vrtk_to_base.x)
+        y: 0.0
+        z: 0.0   # base_footprint is on ground (z=0)
+      base_to_lidar:
+        x: 0.2  # [m] Offset from base_link to lidar_link
+        y: 0.0
+        z: 0.6  # Default lidar height
+    
+    # Obstacle avoidance state machine parameters
+    obstacle_avoidance:
+      speed_reduction_slow: 0.6     # Speed factor for SLOW_APPROACH (0.0-1.0)
+      initial_stop_duration: 3.0     # [s] Duration to fully stop (steering=0, speed=0) when entering EMERGENCY_STOP
+      deadlock_timeout: 30.0         # [s] Timeout before deadlock warning is issued (robot stuck in EMERGENCY_STOP)
+      lidar_timeout: 2.0             # [s] No drive in autonomous mode when obstacle avoidance is on if no message on /obstacles/lidar for this duration
+
+tactical_scheduler:
+  ros__parameters:
+    schedules_file: "/routen/settings/schedules.yaml"
+    routes_dir: "/routen/routes"
+    settings_file: "/routen/settings/settings.yaml"
+    check_interval: 2.0
+    default_tolerance_home_check: 0.5
+
+sector_publisher:
+  ros__parameters:
+    sector_analysis:
+      max_range: 5.0           # [m] Maximum range to analyze for sectors
+      config_path: ""         # Path to sector_config.yaml (empty = auto-detect from control package)
+    topics:
+      obstacles_input: "/obstacles/fused"  # Input OccupancyGrid topic (fused LiDAR+camera)
+      sectors_output: "/obstacles/sectors"  # Output ObstacleSectors topic
+
+sector_viz:
+  ros__parameters:
+    sector_analysis:
+      config_path: ""         # Path to sector_config.yaml (empty = auto-detect from control package)
+    topics:
+      sectors_input: "/obstacles/sectors"  # Input ObstacleSectors topic
+      markers_output: "/obstacles/sectors_viz"  # Output MarkerArray topic for RViz
+    viz:
+      frame_id: "base_link"   # Frame for marker visualization
+      height: 0.1             # [m] Height of sector boxes
+      alpha_blocked: 0.7      # Opacity when sector is blocked (0.0-1.0)
+      alpha_free: 0.2          # Opacity when sector is free (0.0-1.0)
+
+obstacle_viz:
+  ros__parameters:
+    robot:
+      footprint:
+        width: 0.6           # [m] total width of robot
+        front: 0.1           # [m] distance in front of lidar to consider as robot
+        rear: 0.7            # [m] distance behind lidar to consider as robot
+    topics:
+      obstacles_input: "/obstacles/lidar"  # Input OccupancyGrid topic (fused LiDAR+camera)
+    viz:
+      range_m: 5.0              # [m] visualized radius around lidar
+      resolution_m_per_px: 0.02  # [m/px] base resolution (0.02 = 2cm/px, gives 200x200px base image)
+      upsample_factor: 1        # Upsample final image by this factor for smoother display (2 = 400x400px output)
+      image_topic: "/obstacles/image"
+    sector_analysis:
+      max_range: 5.0           # [m] Maximum range to analyze for sectors
+      config_path: ""         # Path to sector_config.yaml (empty = auto-detect from control package)
+
+lidar_camera_fusion:
+  ros__parameters:
+    camera:
+      hfov_deg: 86.0          # RealSense D455 horizontal FOV
+      num_sectors: 5           # Must match realsense obstacle detector
+      max_range_m: 2.0         # Only fuse within this distance
+      stale_timeout_s: 2.0     # Fallback to pure LiDAR if no camera data
+    topics:
+      lidar_grid: "/obstacles/lidar"
+      camera_sectors: "/obstacle_sectors"
+      fused_output: "/obstacles/fused"

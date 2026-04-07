@@ -1,0 +1,14 @@
+# Request video clips from ringbuffer for security event
+string event_id                    # Unique event identifier
+builtin_interfaces/Time event_time # Timestamp of the event
+string[] camera_ids                # Camera IDs to capture clips from
+float32 pre_event_seconds          # Seconds before event to include in clip
+float32 post_event_seconds         # Seconds after event to include in clip
+---
+# Response with captured video clip file paths
+bool success                       # Whether capture was successful
+string message                     # Status message
+string[] file_paths                # Paths to generated video clip files
+string[] camera_ids_out            # Camera IDs corresponding to file_paths (same order)
+
+

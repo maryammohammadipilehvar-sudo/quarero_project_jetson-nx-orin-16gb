@@ -1,0 +1,30 @@
+# Service to query active schedule from scheduler
+# Scheduler ONLY provides data - control loop makes ALL decisions
+
+# Request - minimal, no robot state information
+string command_id                # Unique command identifier for logging
+
+---
+
+# Response - ONLY schedule/route DATA, no action decisions
+bool success                     # Whether query was successful
+
+# Schedule information
+bool has_active_schedule         # Is there an active schedule in time window
+string schedule_id               # Active schedule ID (empty if none)
+string schedule_display_name     # Human-readable schedule name (e.g., "Mo-Fr 08:00-12:00")
+string route_name                # Current route name to execute
+
+# Route data (GeoPath equivalent)
+geometry_msgs/Point[] waypoints  # GPS waypoints (x=lat, y=lon, z=alt)
+uint8 geopath_mode               # 0=ONCE, 1=LOOP, 2=PING_PONG, 4=STOP
+
+# Progress info
+int32 current_route_index        # Current route index in schedule
+int32 total_routes               # Total routes in schedule
+int32 current_repetition         # Current repetition count
+int32 total_repetitions          # Total repetitions for current route
+
+# Status message
+string message                   # Info/error message
+

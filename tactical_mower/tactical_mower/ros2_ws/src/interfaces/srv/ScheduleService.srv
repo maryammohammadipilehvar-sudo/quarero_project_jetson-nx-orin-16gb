@@ -1,0 +1,11 @@
+# Schedule service for schedule management
+# Request
+string command_id                    # Unique command identifier
+string action                        # "add", "remove", or "update"
+interfaces/Schedule schedule         # Schedule data (used for "add" and "update")
+string schedule_id                   # Schedule ID (used for "remove" and "update")
+---
+# Response
+bool success                         # Whether command was successful
+string message                       # Status message
+

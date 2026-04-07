@@ -1,0 +1,22 @@
+schedules:
+- active: true
+  auto_charge_return: true
+  battery_threshold: 50
+  done: false
+  end_time: 00:00
+  home_tolerance: 0.5
+  loop: true
+  require_home_return: true
+  route_mode: sequential
+  routes:
+  - repeat_count: 100
+    route_name: Tex
+  schedule_id: schedule_0_1773220118
+  start_time: 08:00
+  weekdays:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5

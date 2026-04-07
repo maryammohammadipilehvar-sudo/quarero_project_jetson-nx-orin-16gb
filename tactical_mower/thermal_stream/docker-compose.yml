@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  eneo_INT-8SF0003M0A:
+    image: realsensed_camera_obstacle_avoidance-realsense #realsense_docker_ros2-realsense
+    container_name: theramal_camera_jazzy
+    environment:
+      - ROS_DISTRO=jazzy
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - ROS_DOMAIN_ID=0
+    # Host networking simplifies ROS 2 DDS discovery between containers/host
+    network_mode: host
+    ipc: host
+    pid: host
+    privileged: true  
+    volumes:
+      - /dev:/dev 
+      - ./workspace:/workspace
+    command: bash -c "source /opt/ros/jazzy/setup.bash && colcon build && source /workspace/install/setup.bash && ros2 launch eneo_ip_therm_camera dual_rtsp.launch.py"
+    stdin_open: true
+    tty: true
+    restart: always

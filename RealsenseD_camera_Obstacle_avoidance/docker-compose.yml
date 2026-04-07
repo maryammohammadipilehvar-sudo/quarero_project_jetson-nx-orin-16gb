@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  realsense:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: intel_realsense_ros2
+    environment:
+      - ROS_DISTRO=jazzy
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - ROS_DOMAIN_ID=0
+    # Host networking simplifies ROS 2 DDS discovery between containers/host
+    network_mode: host
+    ipc: host
+    pid: host
+    # Access to USB/Video devices for Intel RealSense (limit exposure)
+    privileged: true
+    volumes:
+      - /dev:/dev
+      - ./workspace:/workspace
+    #command: ros2 launch realsense2_camera rs_launch.py
+    command: ros2 launch realsense_obstacle realsense_obstacle.launch.py
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

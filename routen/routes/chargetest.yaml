@@ -1,9 +1,0 @@
-loop_mode: false
-name: chargetest
-waypoints:
-- altitude: 0
-  latitude: 48.65548935310218
-  longitude: 9.225994778576645
-- altitude: 0
-  latitude: 48.65549954886996
-  longitude: 9.225950427353384

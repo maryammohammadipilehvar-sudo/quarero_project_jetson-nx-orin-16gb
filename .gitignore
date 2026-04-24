@@ -1,12 +1,40 @@
-**/venv/
-**/.venv/
-**/pypackages/
-**/__pycache__/
-**/*.pyc
-**/*.pyo
-**/*.log
-**/*.pt
-**/build/
-**/install/
-**/log/
-**/.DS_Store
+# ROS 2 build artifacts
+build/
+build_ros2/
+build_web/
+install/
+install_ros2/
+install_web/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+pypackages/
+
+# ROS recordings & data
+ros_bags/
+*.db3
+*.mcap
+
+# ML model weights (too big for git; use Git LFS or external storage)
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Logs
+*.log
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+.bash_history.d/
+
+# OS
+.DS_Store
+Thumbs.db

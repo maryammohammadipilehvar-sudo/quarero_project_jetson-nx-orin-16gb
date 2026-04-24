@@ -2,13 +2,13 @@ auto_charge_return: true
 battery_threshold: 16
 charge_detection_radius: 0.8
 charge_point:
-  latitude: 48.65547186895746
-  longitude: 9.225988519965314
-  yaw: -103.30394184205743
+  latitude: 48.65453016645886
+  longitude: 9.224024608582917
+  yaw: 50.62043943126522
 enable_obstacle_avoidance: true
 home_point:
-  latitude: 48.65548935310218
-  longitude: 9.225994778576645
+  latitude: 48.654516279224026
+  longitude: 9.224007353285572
 home_tolerance: 0.5
 max_route_distance: 3.0
 security_always_enable_event_types: []

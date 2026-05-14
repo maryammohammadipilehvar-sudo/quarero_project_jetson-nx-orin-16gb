@@ -1,0 +1,9 @@
+loop_mode: true
+name: Ma
+waypoints:
+- altitude: 0
+  latitude: 48.654726705242204
+  longitude: 9.226266880544673
+- altitude: 0
+  latitude: 48.65466955783821
+  longitude: 9.226243449779986

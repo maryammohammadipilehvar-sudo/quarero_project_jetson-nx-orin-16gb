@@ -1,14 +1,14 @@
-auto_charge_return: true
-battery_threshold: 16
+auto_charge_return: false
+battery_threshold: 9
 charge_detection_radius: 0.8
 charge_point:
-  latitude: 48.65453016645886
-  longitude: 9.224024608582917
-  yaw: 50.62043943126522
-enable_obstacle_avoidance: true
+  latitude: 48.65470876874471
+  longitude: 9.226265314527641
+  yaw: -93.3009283485678
+enable_obstacle_avoidance: false
 home_point:
-  latitude: 48.654516279224026
-  longitude: 9.224007353285572
+  latitude: 48.654726705242204
+  longitude: 9.226266880544673
 home_tolerance: 0.5
 max_route_distance: 3.0
 security_always_enable_event_types: []
@@ -27,5 +27,5 @@ security_event_defaults:
   pre_event_seconds: 10.0
 security_notification_windows: []
 security_video_capture_timeout_seconds: 60
-speed_factor: 1.026
+speed_factor: 1.406
 waypoint_tolerance: 0.5

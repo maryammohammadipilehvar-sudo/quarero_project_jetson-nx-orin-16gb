@@ -1,1 +1,67 @@
-schedules: []
+schedules:
+- active: false
+  auto_charge_return: false
+  battery_threshold: 9
+  done: false
+  end_time: '17:00'
+  home_tolerance: 0.5
+  loop: true
+  require_home_return: true
+  route_mode: sequential
+  routes:
+  - repeat_count: 12
+    route_name: Ma
+  schedule_id: schedule_0_1777366532
+  start_time: 08:00
+  weekdays:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+- active: false
+  auto_charge_return: false
+  battery_threshold: 9
+  done: false
+  end_time: '17:00'
+  home_tolerance: 0.5
+  loop: true
+  require_home_return: true
+  route_mode: sequential
+  routes:
+  - repeat_count: 18
+    route_name: Test11
+  schedule_id: schedule_0_1777275992
+  start_time: 08:00
+  weekdays:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+- active: false
+  auto_charge_return: false
+  battery_threshold: 9
+  done: false
+  end_time: '17:00'
+  home_tolerance: 0.5
+  loop: true
+  require_home_return: true
+  route_mode: sequential
+  routes:
+  - repeat_count: 12
+    route_name: Test111
+  schedule_id: schedule_0_1777366291
+  start_time: 08:00
+  weekdays:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6

@@ -83,10 +83,10 @@ def map_device_name(eneo_device: str, ip_address: str) -> str:
     # Determine based on IP or Device Name
     # 192.168.10.128 could be thermal or rgb
     # For now: If IP is 192.168.10.128, use "eneo_thermal" as default
-    if ip_address == "192.168.10.128":
+    if ip_address == "192.168.10.203":
         # Could be thermal or rgb - based on channel or device name
         # Default: thermal
-        return "eneo_thermal"
+        return "eneo_rgb"
     
     # Fallback: device name in lowercase
     return eneo_device.lower().replace('-', '_')

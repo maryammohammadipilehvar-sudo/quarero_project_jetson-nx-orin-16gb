@@ -57,7 +57,7 @@ class JoystickController:
         # Filter can be re-enabled later if needed
         steer_filtered = steer_input
         speed_filtered = speed_raw
-        
+
         # Store values for potential future filter use
         self._last_steer = steer_filtered
         self._last_speed = speed_filtered

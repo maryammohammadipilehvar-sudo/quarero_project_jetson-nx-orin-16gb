@@ -1,10 +1,8 @@
 # Basis-Image: ROS 2 Jazzy (arm64)
 FROM arm64v8/ros:jazzy-ros-base
-
 # Umgebungsvariablen
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ROS_DISTRO=jazzy
-
 # System-Updates und grundlegende Tools
 RUN apt-get update && apt-get install -y \
     python3-pip \
@@ -22,28 +20,21 @@ RUN apt-get update && apt-get install -y \
     python3-serial \
     python3-pyproj\
     ros-jazzy-cv-bridge\
-    #python3-opencv \
     ros-jazzy-geographic-msgs \
     nano \
     tree \
     screen \
     && rm -rf /var/lib/apt/lists/*
-
+RUN ln -s /opt/ros/jazzy/lib/libfastcdr.so.2.2.7 /opt/ros/jazzy/lib/libfastcdr.so.2.2.5
 # Workspace-Verzeichnis
 WORKDIR /app/ros2_ws
-
 # Copy requirements.txt and install Python dependencies
 COPY requirements-ros2_jetson.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir --ignore-installed -r /tmp/requirements.txt --break-system-packages && \
     rm /tmp/requirements.txt
-
-# Optional: Beispiel-Package clonen
-# RUN git clone https://github.com/ros2/examples src/examples
-
 # ROS-Umgebung laden
 SHELL ["/bin/bash", "-c"]
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
     echo "[ -f /app/ros2_ws/install_ros2/setup.bash ] && source /app/ros2_ws/install_ros2/setup.bash" >> ~/.bashrc
-
 # Default-CMD: Bash mit ROS geladen
 CMD ["bash", "-c", "source /opt/ros/${ROS_DISTRO}/setup.bash && exec bash"]

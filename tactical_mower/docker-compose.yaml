@@ -20,7 +20,6 @@ services:
     devices: 
       - /dev/ttyTHS1:/dev/ttyTHS1  # UART 1
       - /dev/ttyTHS2:/dev/ttyTHS2  # UART 2
-      # TODO: Change first part back to ACM0
       - /dev/ttyACM0:/dev/ttyACM0  # Roboclaw
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix

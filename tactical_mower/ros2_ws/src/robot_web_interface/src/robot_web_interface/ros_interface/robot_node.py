@@ -243,6 +243,7 @@ class RobotNode(Node):
         self.joy_web_pub = self.create_publisher(Joy, joy_web_topic, 10)
         self.set_speed_pub = self.create_publisher(Float32, set_speed_topic, 10)
         self.autonomous_operation_pub = self.create_publisher(Bool, autonomous_operation_topic, 10)
+        self.obstacle_avoidance_pub = self.create_publisher(Bool, '/control/obstacle_avoidance_enabled', 10)
         self.speed_factor = 1.0
 
         # Schedule Publishers
@@ -280,6 +281,8 @@ class RobotNode(Node):
             settings = load_settings()
             self.speed_factor = float(settings.get("speed_factor", 1.0))
             self._publisher_methods.publish_speed_factor(self.speed_factor)
+            obstacle_avoidance_enabled = settings.get("enable_obstacle_avoidance", True)
+            self._publisher_methods.publish_obstacle_avoidance_enabled(obstacle_avoidance_enabled)
         except Exception as e:
             self.get_logger().error(f"Failed to initialize speed factor from settings: {e}")
 
@@ -501,6 +504,9 @@ class RobotNode(Node):
 
     def publish_speed_factor(self, factor: float) -> None:
         self._publisher_methods.publish_speed_factor(factor)
+
+    def publish_obstacle_avoidance_enabled(self, enabled: bool) -> None:
+        self._publisher_methods.publish_obstacle_avoidance_enabled(enabled)
 
     def send_move_command(self, x: float, y: float) -> None:
         self._publisher_methods.send_move_command(x, y)

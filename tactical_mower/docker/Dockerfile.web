@@ -1,5 +1,4 @@
 FROM ros:jazzy
-
 # 1) ROS-/System-Pakete
 RUN apt-get update && apt-get install -y \
     python3-pip \
@@ -27,35 +26,21 @@ RUN apt-get update && apt-get install -y \
     ros-jazzy-geometry-msgs \
     ros-jazzy-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
-
+RUN ln -s /opt/ros/jazzy/lib/libfastcdr.so.2.2.7 /opt/ros/jazzy/lib/libfastcdr.so.2.2.5
 # 2) Arbeitsverzeichnis
 WORKDIR /app
-
 # 3) Python-Dependencies 
 COPY requirements-web.txt /app/requirements.txt
 RUN pip3 install --no-cache-dir -r /app/requirements.txt --break-system-packages
-
 # 4) Static-Files (HTML, JS, CSS)
-# Create static directory structure
 RUN mkdir -p /app/static/media
-
-# Copy static web files (HTML, JS, CSS)
-# These are baked into the image for production use
 COPY static/ /app/static/
-
-# Copy media files (images, logos, etc.) if media directory exists
-# Note: This will fail if media/ doesn't exist - ensure it exists or comment out
 COPY media/ /app/static/media/
-
-# Optional: FastDDS configuration
 COPY fastdds.xml /tmp/fastdds.xml
-
 # 5) Data-Verzeichnis
 RUN mkdir -p /data
-
 # 6) Port & Volumes
 EXPOSE 8020
 VOLUME ["/data", "/app/ros2_ws"]
-
-# 7) Start: direkt in eine Shell mit gesourcter ROS-Umgebung
+# 7) Start
 CMD ["bash", "-c", "source /opt/ros/${ROS_DISTRO}/setup.bash && exec bash"]

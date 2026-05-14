@@ -37,12 +37,15 @@ Target: **Jetson Orin Nano**, flashed to **JetPack 6.x (L4T R36.x)**, on a **dif
 
 ## Run the bring-up script
 
+The script lives in the repo at `bringup-new-jetson.sh`. Clone first, then run:
+
 ```
-scp /home/quarero/bringup-new-jetson.sh <new-jetson>:~/
-ssh <new-jetson>
-chmod +x ~/bringup-new-jetson.sh
-~/bringup-new-jetson.sh
+sudo apt install -y git              # usually preinstalled on JetPack 6
+git clone --branch agent/auto-dev https://github.com/maryammohammadipilehvar-sudo/quarero-projects.git ~/gits
+~/gits/bringup-new-jetson.sh
 ```
+
+The script is idempotent — its own internal "clone" step becomes a fetch + fast-forward when it sees `~/gits/.git` already exists.
 
 The script will:
 - Verify L4T is R36.x.

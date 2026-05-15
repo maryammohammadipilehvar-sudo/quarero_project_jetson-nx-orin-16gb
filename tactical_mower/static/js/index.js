@@ -846,6 +846,7 @@
             'person_detection': 'Person Detection',
             'thermal1': 'Thermal Kamera 1',
             'thermal2': 'Thermal Kamera 2',
+            'rgb2': 'RGB Kamera 2',
             'lidar_debug': 'LiDAR Debug',
             'depth_debug': 'Tiefe (RealSense)'
         };

@@ -34,6 +34,7 @@ _resolution_logged = {
     'main': False,
     'thermal1': False,
     'thermal2': False,
+    'rgb2': False,
     'lidar_debug': False
 }
 
@@ -234,6 +235,43 @@ async def websocket_camera_thermal2(websocket: WebSocket, ros_node: RobotNode):
                 try:
                     jpeg_bytes = await _process_frame_to_bytes_async(
                         frame, 'thermal2', THERMAL_STREAM_MAX_WIDTH, THERMAL_STREAM_MAX_HEIGHT, 35
+                    )
+                    if jpeg_bytes:
+                        await websocket.send_bytes(jpeg_bytes)
+                        last_sent_frame_timestamp = frame_timestamp
+                except (ConnectionClosedOK, ConnectionClosedError, WebSocketDisconnect):
+                    raise
+                except Exception as e:
+                    logger.warning(f'Frame error: {e}')
+            else:
+                await asyncio.sleep(0.05)
+    except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
+        logger.debug(f'Camera WebSocket closed: {camera_type}')
+    except Exception as e:
+        logger.error(f'Camera error {camera_type}: {e}', exc_info=True)
+    finally:
+        ros_node.connection_manager.remove_camera_connection(camera_type, websocket)
+        if not ros_node.connection_manager.has_camera_connections(camera_type):
+            ros_node.connection_manager.unregister_camera_stream(camera_type)
+
+
+async def websocket_camera_rgb2(websocket: WebSocket, ros_node: RobotNode):
+    """RGB2 camera WebSocket stream (Axis channel 1) - BINARY mode for lowest latency"""
+    await websocket.accept()
+    camera_type = 'rgb2'
+    ros_node.connection_manager.register_camera_stream(camera_type)
+    ros_node.connection_manager.add_camera_connection(camera_type, websocket)
+
+    last_sent_frame_timestamp = 0.0
+
+    try:
+        while True:
+            frame, frame_timestamp = ros_node.get_rgb2_frame()
+
+            if frame is not None and frame_timestamp > last_sent_frame_timestamp:
+                try:
+                    jpeg_bytes = await _process_frame_to_bytes_async(
+                        frame, 'rgb2', WEB_STREAM_MAX_WIDTH, WEB_STREAM_MAX_HEIGHT, 70
                     )
                     if jpeg_bytes:
                         await websocket.send_bytes(jpeg_bytes)

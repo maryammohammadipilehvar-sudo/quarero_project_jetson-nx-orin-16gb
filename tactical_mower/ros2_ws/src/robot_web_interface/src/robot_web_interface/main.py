@@ -340,6 +340,13 @@ async def websocket_camera_thermal2_endpoint(websocket: WebSocket):
     await camera.websocket_camera_thermal2(websocket, ros_node)
 
 
+@app.websocket("/ws/camera/rgb2")
+async def websocket_camera_rgb2_endpoint(websocket: WebSocket):
+    """RGB2 camera WebSocket endpoint (Axis channel 1)"""
+    global ros_node
+    await camera.websocket_camera_rgb2(websocket, ros_node)
+
+
 @app.websocket("/ws/camera/lidar_debug")
 async def websocket_camera_lidar_debug_endpoint(websocket: WebSocket):
     """LIDAR debug (Livox) camera WebSocket endpoint"""

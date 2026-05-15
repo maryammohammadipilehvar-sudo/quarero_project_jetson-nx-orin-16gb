@@ -133,18 +133,32 @@ class SubscriberCallbacks:
         try:
             # Always process frames to ensure StatusManager always has the latest frame
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            
+
             # Use message timestamp if valid, otherwise fallback to current time
             msg_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
             if msg_time <= 0:
                 msg_time = time.time()
-            
+
             # ALWAYS update frame - no timestamp filtering in callback
             with self.status_manager.frame_lock:
                 self.status_manager.thermal2_frame = cv_image
                 self.status_manager.thermal2_frame_time = msg_time
         except Exception as e:
             self.node.get_logger().error(f'Thermal2 error: {e}')
+
+    def rgb2_callback(self, msg: Image) -> None:
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+            msg_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            if msg_time <= 0:
+                msg_time = time.time()
+
+            with self.status_manager.frame_lock:
+                self.status_manager.rgb2_frame = cv_image
+                self.status_manager.rgb2_frame_time = msg_time
+        except Exception as e:
+            self.node.get_logger().error(f'RGB2 error: {e}')
     
     def lidar_debug_callback(self, msg: Image) -> None:
         try:

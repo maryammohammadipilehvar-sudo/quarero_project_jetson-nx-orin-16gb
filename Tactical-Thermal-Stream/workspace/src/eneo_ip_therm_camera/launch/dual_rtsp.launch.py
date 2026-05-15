@@ -30,6 +30,12 @@ def generate_launch_description():
         channel=int(cfg["channel"]["rgb"])
     )
 
+    rgb2_stream_url = axis_url(
+        ip=ip,
+        port=port,
+        channel=int(cfg["channel"]["rgb2"])
+    )
+
     thermal_stream_url = axis_url(
         ip=ip,
         port=port,
@@ -49,6 +55,19 @@ def generate_launch_description():
         output='screen'
     )
 
+    node_rgb2_stream = Node(
+        package='eneo_ip_therm_camera',
+        executable='rtsp_image_publisher',
+        name='rgb2_camera_stream',
+        parameters=[
+            {'rtsp_url': rgb2_stream_url},
+            {'frame_rate': 10.0},
+            {'topic_name': 'rtsp_camera/image_raw'}
+        ],
+        remappings=[('rtsp_camera/image_raw', 'ip_camera/rgb2_raw')],
+        output='screen'
+    )
+
     node_thermal_stream = Node(
         package='eneo_ip_therm_camera',
         executable='rtsp_image_publisher',
@@ -64,5 +83,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         node_rgb_stream,
+        node_rgb2_stream,
         #node_thermal_stream,
     ])

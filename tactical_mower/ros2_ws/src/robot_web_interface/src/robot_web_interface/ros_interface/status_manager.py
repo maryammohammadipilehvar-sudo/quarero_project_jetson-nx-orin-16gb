@@ -18,12 +18,14 @@ class StatusManager:
         self.current_frame: Optional[Any] = None
         self.thermal1_frame: Optional[Any] = None
         self.thermal2_frame: Optional[Any] = None
+        self.rgb2_frame: Optional[Any] = None
         self.lidar_debug_frame: Optional[Any] = None
         self.depth_debug_frame: Optional[Any] = None
         # Frame timestamps to track when frames were received (for newest-first sending)
         self.current_frame_time: float = 0.0
         self.thermal1_frame_time: float = 0.0
         self.thermal2_frame_time: float = 0.0
+        self.rgb2_frame_time: float = 0.0
         self.lidar_debug_frame_time: float = 0.0
         self.depth_debug_frame_time: float = 0.0
         self.frame_lock = threading.Lock()
@@ -95,6 +97,15 @@ class StatusManager:
             return frame.copy(), timestamp
         return None, 0.0
     
+    def get_rgb2_frame(self):
+        """Get rgb2 frame (Axis channel 1 RGB). Returns (frame_copy, timestamp) or (None, 0.0)"""
+        with self.frame_lock:
+            frame = self.rgb2_frame
+            timestamp = self.rgb2_frame_time
+        if frame is not None:
+            return frame.copy(), timestamp
+        return None, 0.0
+
     def get_lidar_debug_frame(self):
         """Get lidar debug frame. Returns (frame_copy, timestamp) or (None, 0.0)
         Makes a copy to avoid blocking - lock is held only briefly for read"""
@@ -129,6 +140,9 @@ class StatusManager:
             elif frame_type == "thermal2":
                 self.thermal2_frame = None
                 self.thermal2_frame_time = 0.0
+            elif frame_type == "rgb2":
+                self.rgb2_frame = None
+                self.rgb2_frame_time = 0.0
             elif frame_type == "lidar_debug":
                 self.lidar_debug_frame = None
                 self.lidar_debug_frame_time = 0.0

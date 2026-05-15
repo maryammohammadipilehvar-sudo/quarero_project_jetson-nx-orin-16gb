@@ -131,9 +131,16 @@ class RobotNode(Node):
         )
         
         self.thermal2_sub = self.create_subscription(
-            Image, 
-            '/ip_camera/rgb_raw', 
-            self.subscribers.thermal2_callback, 
+            Image,
+            '/ip_camera/rgb_raw',
+            self.subscribers.thermal2_callback,
+            camera_qos
+        )
+
+        self.rgb2_sub = self.create_subscription(
+            Image,
+            '/ip_camera/rgb2_raw',
+            self.subscribers.rgb2_callback,
             camera_qos
         )
 
@@ -382,6 +389,10 @@ class RobotNode(Node):
     def get_thermal2_frame(self):
         """Get thermal2 frame. Returns (frame, timestamp) or (None, 0.0)"""
         return self.status_manager.get_thermal2_frame()
+
+    def get_rgb2_frame(self):
+        """Get rgb2 frame (Axis channel 1). Returns (frame, timestamp) or (None, 0.0)"""
+        return self.status_manager.get_rgb2_frame()
 
     def get_lidar_debug_frame(self):
         """Get lidar debug frame. Returns (frame, timestamp) or (None, 0.0)"""

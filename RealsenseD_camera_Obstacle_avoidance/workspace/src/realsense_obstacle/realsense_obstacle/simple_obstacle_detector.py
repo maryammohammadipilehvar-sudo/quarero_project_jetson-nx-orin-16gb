@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Erweiterter Hindernis-Detector für Intel RealSense D455.
+Erweiterter Hindernis-Detector für die vordere Tiefenkamera
+(aktuell: Luxonis OAK-D Lite über depthai_ros_driver).
 
 Funktionen:
 - Nutzt Depth-Image, betrachtet eine ROI vor dem Roboter.
@@ -108,10 +109,18 @@ class SectorObstacleDetector(Node):
         roi = depth[roi_y1:roi_y2, roi_x1:roi_x2]
         roi_h, roi_w = roi.shape[:2]
 
-        # Depth nach Meter
+        # Depth nach Meter:
+        #   16UC1 (RealSense): Millimeter → /1000
+        #   32FC1 (OAK depthai_ros_driver stereo): bereits in Metern
         if msg.encoding == '16UC1':
             roi_m = roi.astype(np.float32) / 1000.0
+        elif msg.encoding == '32FC1':
+            roi_m = roi.astype(np.float32)
         else:
+            self.get_logger().warn(
+                f"Unbekanntes Depth-Encoding '{msg.encoding}', "
+                "interpretiere als Meter (float)."
+            )
             roi_m = roi.astype(np.float32)
 
         # Gültige Pixel

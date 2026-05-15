@@ -1,9 +1,48 @@
+# OAK-D Lite via depthai_ros_driver.
+# Same /obstacle_sectors + /obstacle_detected contract as the old RealSense.
+
 sector_obstacle_detector:
   ros__parameters:
-    depth_topic: "/camera/camera/depth/image_rect_raw"
+    # depthai_ros_driver depth topic (32FC1, meters) for RGBD pipeline.
+    depth_topic: "/oak/stereo/image_raw"
     near_distance_m: 1.0
     far_distance_m: 2.0
     min_obstacle_pixels: 200
     min_sector_pixels: 50
+    # Keep the legacy topic name so robot_web_interface's depth-debug
+    # subscription keeps working without an app-side change.
     debug_image_topic: "/camera/camera/depth/obstacle_debug"
     num_cols: 5
+
+# Picked up by depthai_ros_driver when launched with params_file:=<this>.
+# Factory intrinsics are loaded from the OAK EEPROM by the driver.
+#
+# RGBD is the only pipeline_type in this depthai-ros release that
+# actually instantiates the stereo-depth node and publishes
+# /oak/stereo/image_raw. (STEREO mode only brings up left/right/rgb
+# mono streams — no depth.)
+#
+# Sync MUST stay disabled — explicitly enabling it under RGBD wires up
+# a Sync node with no inputs and the component_container aborts with
+# "Sync(13) - No inputs".
+oak:
+  ros__parameters:
+    camera:
+      i_pipeline_type: "RGBD"
+      i_nn_type: "none"
+      i_enable_imu: false
+      i_enable_sync: false
+      i_publish_tf_from_calibration: true
+    pipeline_gen:
+      i_enable_sync: false
+    stereo:
+      i_subpixel: true
+      i_lr_check: true
+      i_depth_preset: "HIGH_ACCURACY"
+      i_low_bandwidth: false
+      i_output_disparity: false
+      i_height: 400
+      i_width: 640
+      # Lazy publisher waits for a matching-QoS subscriber before
+      # pushing frames; force it off so depth always flows.
+      i_enable_lazy_publisher: false

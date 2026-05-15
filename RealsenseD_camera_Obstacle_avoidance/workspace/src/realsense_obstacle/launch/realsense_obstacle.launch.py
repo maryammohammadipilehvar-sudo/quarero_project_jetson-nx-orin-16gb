@@ -7,10 +7,10 @@ import os
 
 def generate_launch_description():
 
-    realsense_launch_file = os.path.join(
-        get_package_share_directory('realsense2_camera'),
+    oak_launch_file = os.path.join(
+        get_package_share_directory('depthai_ros_driver'),
         'launch',
-        'rs_launch.py'
+        'camera.launch.py'
     )
 
     obstacle_params = os.path.join(
@@ -19,17 +19,14 @@ def generate_launch_description():
         'params.yaml'
     )
 
-    realsense = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(realsense_launch_file),
+    # OAK-D Lite stereo depth, aligned to RGB. depthai_ros_driver
+    # publishes the depth image on /oak/stereo/image_raw (32FC1, meters).
+    oak = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(oak_launch_file),
         launch_arguments={
-            'enable_color': 'true',
-            'enable_depth': 'true',                          # ← enable depth
-            'rgb_camera.color_profile': '1280x720x30',       # ← color stream
-            'depth_module.depth_profile': '640x480x30',      # ← depth stream
-            'align_depth.enable': 'true',                    # ← align to color frame
-            'spatial_filter.enable': 'true',                 # ← smooth depth
-            'temporal_filter.enable': 'true',                # ← reduce noise
-            'hole_filling_filter.enable': 'true',            # ← fill gaps
+            'camera_model': 'OAK-D-LITE',
+            'name': 'oak',
+            'params_file': obstacle_params,
         }.items()
     )
 
@@ -41,7 +38,20 @@ def generate_launch_description():
         parameters=[obstacle_params]
     )
 
+    # robot_web_interface subscribes to the legacy RealSense RGB topic
+    # /camera/camera/color/image_raw. Relay the OAK's rectified RGB
+    # output so the web UI's RGB pane keeps working without touching
+    # the web app.
+    rgb_relay = Node(
+        package='topic_tools',
+        executable='relay',
+        name='oak_rgb_relay',
+        arguments=['/oak/rgb/image_rect', '/camera/camera/color/image_raw'],
+        output='screen',
+    )
+
     return LaunchDescription([
-        realsense,
-        obstacle_node,    # ← uncommented
+        oak,
+        obstacle_node,
+        rgb_relay,
     ])

@@ -1,6 +1,11 @@
 """ROS2 node for RoboClaw motor controller wrapper."""
 
+import threading
+import time
+
 import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from std_msgs.msg import Float32
 
@@ -37,6 +42,10 @@ class RoboclawWrapperNode(Node):
                 ('duty_mode', True),
                 ('velocity_qpps_to_duty_factor', 8),
                 ('drive_acceleration_factor', 0.8),
+                # /cmd_drive watchdog: if no command in this many seconds, brake.
+                # Without this, the Roboclaw holds the last DutyAccel target
+                # indefinitely (CLAUDE.md §1 missing-watchdog hazard).
+                ('velocity_timeout', 0.5),
                 ('roboclaw_mapping.drive_left.address', 128),
                 ('roboclaw_mapping.drive_left.channel', 'M1'),
                 ('roboclaw_mapping.drive_left.flip', False),
@@ -139,16 +148,45 @@ class RoboclawWrapperNode(Node):
         # Publisher for remaining runtime estimate
         self.runtime_estimate_pub = self.create_publisher(Float32, '/drive/runtime_estimate', 1)
         voltage_rate = self.get_parameter('voltage_publish_rate').get_parameter_value().double_value
-        self.voltage_timer = self.create_timer(1.0 / voltage_rate, self.publish_battery_percentage)
-        
+
+        # All callbacks share a ReentrantCallbackGroup so a slow battery USB read
+        # cannot starve drive_cmd_cb or the cmd_drive watchdog. Hardware access
+        # is still serialised by self._rc_lock, since concurrent reads/writes
+        # on the same /dev/ttyACM0 would garble the Roboclaw byte stream.
+        self._cb_group = ReentrantCallbackGroup()
+        self._rc_lock = threading.Lock()
+
+        self.voltage_timer = self.create_timer(
+            1.0 / voltage_rate, self.publish_battery_percentage,
+            callback_group=self._cb_group,
+        )
+
         # Track movement state for runtime estimation
         self._is_moving = False
 
         # Subscriber for drive commands
-        self.drive_cmd_sub = self.create_subscription(CommandDrive, "/cmd_drive", self.drive_cmd_cb, 10)
-        
+        self.drive_cmd_sub = self.create_subscription(
+            CommandDrive, "/cmd_drive", self.drive_cmd_cb, 10,
+            callback_group=self._cb_group,
+        )
+
         # Subscriber for debug voltage override
-        self.debug_voltage_sub = self.create_subscription(Float32, "/debug/motor_voltage", self._debug_voltage_callback, 1)
+        self.debug_voltage_sub = self.create_subscription(
+            Float32, "/debug/motor_voltage", self._debug_voltage_callback, 1,
+            callback_group=self._cb_group,
+        )
+
+        # /cmd_drive watchdog. Roboclaw firmware holds the last DutyAccel target
+        # forever on serial silence; if upstream stops publishing (gamepad
+        # disconnect, joy_controller crash, dropped L1-release zero) we need to
+        # brake here.
+        self._velocity_timeout = self.get_parameter('velocity_timeout').get_parameter_value().double_value
+        self._last_cmd_time = None  # monotonic seconds; None = no command yet, watchdog quiet
+        self._watchdog_braked = False
+        self.create_timer(
+            0.05, self._cmd_watchdog_check,
+            callback_group=self._cb_group,
+        )  # 20 Hz
 
         self.log.info(str(self.rc.ReadVersion(self.addresses[0])))
         self.log.info("RoboClaw wrapper initialized (encoderless)")
@@ -165,23 +203,19 @@ class RoboclawWrapperNode(Node):
             Returns (None, None, None, False) on error
         """
         try:
-            # Read raw voltage
-            voltage_result = self.rc.ReadMainBatteryVoltage(self.addresses[0])
-            if not voltage_result[0]:
-                return (None, None, None, False)
-            
-            raw_voltage = voltage_result[1] / 10.0  # RoboClaw returns voltage * 10
-            
-            # Read motor currents
-            currents_result = self.rc.ReadCurrents(self.addresses[0])
+            with self._rc_lock:
+                voltage_result = self.rc.ReadMainBatteryVoltage(self.addresses[0])
+                if not voltage_result[0]:
+                    return (None, None, None, False)
+                raw_voltage = voltage_result[1] / 10.0  # RoboClaw returns voltage * 10
+                currents_result = self.rc.ReadCurrents(self.addresses[0])
+
             if not currents_result[0]:
                 return (raw_voltage, None, None, True)
-            
-            # Parse currents
+
             current_m1, current_m2 = self.battery_calculator.parse_roboclaw_currents(currents_result)
-            
             return (raw_voltage, current_m1, current_m2, True)
-            
+
         except Exception as e:
             self.log.warn(f"Failed to read battery data: {e}")
             return (None, None, None, False)
@@ -305,14 +339,18 @@ class RoboclawWrapperNode(Node):
         Args:
             cmd (CommandDrive): Incoming drive command with left/right wheel velocities.
         """
+        # Stamp watchdog first so a slow send_velocity write can't trip the timeout
+        self._last_cmd_time = time.monotonic()
+        self._watchdog_braked = False
+
         # Check if robot is moving (non-zero velocity)
         is_moving = abs(cmd.left_vel) > 0.01 or abs(cmd.right_vel) > 0.01
         self._is_moving = is_moving
-        
+
         # Update runtime estimator movement state
         current_time = self.get_clock().now().nanoseconds / 1e9
         self.runtime_estimator.set_moving(is_moving, current_time)
-        
+
         self.send_velocity("drive_left", cmd.left_vel)
         self.send_velocity("drive_right", cmd.right_vel)
 
@@ -329,25 +367,68 @@ class RoboclawWrapperNode(Node):
         if props["flip"]:
             qpps = -qpps
 
-        if props["channel"] == "M1":
-            if self.duty_mode:
-                self.rc.DutyAccelM1(props["address"], self.drive_accel, qpps)
-            else:
-                self.rc.SpeedAccelM1(props["address"], self.drive_accel, qpps)
-        else:  # M2
-            if self.duty_mode:
-                self.rc.DutyAccelM2(props["address"], self.drive_accel, qpps)
-            else:
-                self.rc.SpeedAccelM2(props["address"], self.drive_accel, qpps)
+        with self._rc_lock:
+            if props["channel"] == "M1":
+                if self.duty_mode:
+                    self.rc.DutyAccelM1(props["address"], self.drive_accel, qpps)
+                else:
+                    self.rc.SpeedAccelM1(props["address"], self.drive_accel, qpps)
+            else:  # M2
+                if self.duty_mode:
+                    self.rc.DutyAccelM2(props["address"], self.drive_accel, qpps)
+                else:
+                    self.rc.SpeedAccelM2(props["address"], self.drive_accel, qpps)
+
+    def _slam_brake(self):
+        """DutyAccel(drive_accel, 0) on both motors. Used by watchdog and shutdown."""
+        try:
+            with self._rc_lock:
+                self.rc.DutyAccelM1(self.addresses[0], self.drive_accel, 0)
+                self.rc.DutyAccelM2(self.addresses[0], self.drive_accel, 0)
+        except Exception as e:
+            self.log.error(f"[brake] slam_brake write failed: {e}")
+
+    def _cmd_watchdog_check(self):
+        """Brake if no /cmd_drive arrived within velocity_timeout."""
+        if self._last_cmd_time is None:
+            return  # no command yet — stay quiet at startup
+        elapsed = time.monotonic() - self._last_cmd_time
+        if elapsed <= self._velocity_timeout:
+            return
+        if not self._watchdog_braked:
+            self.log.warn(
+                f"[watchdog] no /cmd_drive in {elapsed:.2f}s > {self._velocity_timeout}s — braking"
+            )
+            self._watchdog_braked = True
+        self._slam_brake()
+        self._is_moving = False
+
+    def destroy_node(self):
+        """Brake motors before tearing down. Avoids leaving last duty on the Roboclaw."""
+        try:
+            self._slam_brake()
+        except Exception:
+            pass
+        super().destroy_node()
 
 
 def main(args=None):
-    """Main entry point for the RoboClawWrapperNode."""
+    """Main entry point for the RoboClawWrapperNode.
+
+    Uses a MultiThreadedExecutor so the slow Roboclaw battery USB poll cannot
+    starve drive_cmd_cb / the cmd_drive watchdog. Hardware access is serialised
+    by the node's internal lock.
+    """
     rclpy.init(args=args)
     wrapper = RoboclawWrapperNode()
-    rclpy.spin(wrapper)
-    wrapper.destroy_node()
-    rclpy.shutdown()
+    executor = MultiThreadedExecutor(num_threads=3)
+    executor.add_node(wrapper)
+    try:
+        executor.spin()
+    finally:
+        executor.shutdown()
+        wrapper.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":

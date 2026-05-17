@@ -36,7 +36,7 @@ def generate_launch_description():
             executable='joy_controller',
             name='joy_controller',
             output='screen',
-            parameters=[],
+            parameters=[config_file],
             arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')]
         ),
 

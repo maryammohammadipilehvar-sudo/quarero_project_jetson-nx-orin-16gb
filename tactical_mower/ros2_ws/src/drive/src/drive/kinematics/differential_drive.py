@@ -41,8 +41,12 @@ class DifferentialDriveKinematics:
         steer = max(-100.0, min(100.0, steer))
         speed = max(-100.0, min(100.0, speed))
         
-        # Apply deadband to prevent oscillation when inputs are near zero
-        DEADBAND = 2.0  # Ignore inputs smaller than 2% to prevent jitter
+        # 12 % deadband. Measured PS5 stick rest bias on this controller
+        # is +8 on left_stick_forward; with both Roboclaw channels flipped
+        # that produced a slow backward roll on L1-held with no stick input.
+        # 12 % swallows the observed drift with margin, still leaves any
+        # deliberate input past ~12 % stick deflection responsive.
+        DEADBAND = 12.0
         if abs(steer) < DEADBAND:
             steer = 0.0
         if abs(speed) < DEADBAND:

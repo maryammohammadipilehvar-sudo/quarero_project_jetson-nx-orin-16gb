@@ -1,32 +1,28 @@
 #!/usr/bin/env python3
+import re
 import serial
 import threading
+import time
 import rclpy
 from rclpy.node import Node
 from interfaces.msg import Joy
 from std_msgs.msg import Bool
 
-# UART field mapping for PS5 controller
-BUTTONS = {
-    "right_stick_right": 0,
-    "left_stick_forward": 1,
-    "r2": 2,
-    "l2": 3,
-    "select": 4,
-    "x": 5,
-    "square": 6,
-    "start": 7,
-    "triangle": 8,
-    "circle": 9,
-    "l1": 10,
-    "left_stick_right": 11,
-    "right_stick_forward": 12,
-    "r1": 13,
-    "up": 14,
-    "down": 15,
-    "left": 16,
-    "right": 17,
-}
+# ESP UART0 (USB-CP2102) debug-printf input. The original UART1 binary joy protocol
+# (RX,RY,...,CRC) is unusable on Orin NX — serial-tegra @ 19200 corrupts mid-frame
+# bytes. UART0 prints structured text at 115200 that contains the same controller
+# state; we parse that here.
+ESP_JOY_LINE = re.compile(
+    r'idx=\d+,\s*'
+    r'dpad:\s*(0x[0-9a-fA-F]+),\s*'
+    r'buttons:\s*(0x[0-9a-fA-F]+),\s*'
+    r'axis L:\s*(-?\d+),\s*(-?\d+),\s*'
+    r'axis R:\s*(-?\d+),\s*(-?\d+),\s*'
+    r'brake:\s*(-?\d+),\s*'
+    r'throttle:\s*(-?\d+)'
+)
+# Verified empirically on 2026-05-16: L1 sets bit 4 of `buttons` (0x0000 -> 0x0010).
+L1_BIT = 0x0010
 
 
 class JoyController(Node):
@@ -69,74 +65,93 @@ class JoyController(Node):
             self.get_logger().error(f"Failed to open UART: {e}")
             raise e
 
+        # L1 edge state. On held→released, open a wall-clock zero-publish window:
+        # for the next _ZERO_WINDOW_S seconds we publish a zeroed Joy on every
+        # outer loop iteration regardless of UART read rate (the previous fixed
+        # "3 burst frames" was iteration-coupled and frequently fell short, so
+        # the watchdog had to do the braking 0.5–1.0s later). After the window
+        # we go silent so /joy_web takeover after gamepad_timeout still works.
+        self._l1_was_held = False
+        self._l1_release_time = None  # monotonic seconds; None = no release yet
+        self._ZERO_WINDOW_S = 0.5
+
         # Thread for reading UART continuously
         self.running = True
         self.thread = threading.Thread(target=self.read_uart_loop, daemon=True)
         self.thread.start()
 
-    def parse_line_to_vals(self, line: str):
-        """Parse a UART line into a list of integer values.
-
-        Args:
-            line (str): Raw line received from UART.
-
-        Returns:
-            list[int] | None: List of integers corresponding to button/axis values,
-                or None if line is invalid.
-        """
-        if not line:
-            self.get_logger().warning("Received empty line")
-            return None
-
-        valid, vals = self.check_message(line)
-        if not valid:
-            self.get_logger().error(f"Invalid line: '{line}'")
-            return None
-
-        # Normalize length to match BUTTONS mapping
-        if len(vals) < len(BUTTONS):
-            vals += [0] * (len(BUTTONS) - len(vals))
-        elif len(vals) > len(BUTTONS):
-            vals = vals[:len(BUTTONS)]
-
-        return vals
-
     def read_uart_loop(self):
-        """Continuously read UART messages and publish them as Joy messages."""
+        """Read ESP debug stream from UART0 and publish Joy messages.
+
+        The ESP transmits debug output unconditionally on UART0 (unlike UART1,
+        which gated transmit on L1) and interleaves joy + IMU/accel lines at
+        a rate that can outpace per-line readline() processing. To avoid
+        publishing stale frames (the symptom: ~6 s lag on L1 release because
+        we replay buffered L1-held frames first), each iteration drains the
+        serial buffer and only acts on the LATEST valid joy line.
+
+        Legacy deadman semantic is "no Joy unless L1 held", so we drop frames
+        with L1 clear — except for the held→released edge, where we emit one
+        zeroed Joy to force the cascade to stop the motors.
+        """
         while self.running and self.ser.is_open:
             try:
-                raw = self.ser.readline()
-                if not raw:
+                first = self.ser.readline()
+                if not first:
                     continue
-                line = raw.decode('utf-8', errors='ignore').strip()
-                if not line:
+                chunks = [first]
+                # Bounded drain: ESP streams at the UART wire rate, so an
+                # unbounded `while in_waiting > 0` loop spins forever
+                # (every line we consume, another arrives). 32 lines per
+                # outer iteration is enough to keep up with ~200 lines/sec
+                # at our publish cadence without starving the publish step.
+                for _ in range(32):
+                    if self.ser.in_waiting <= 0:
+                        break
+                    more = self.ser.readline()
+                    if not more:
+                        break
+                    chunks.append(more)
+
+                latest_match = None
+                for raw in chunks:
+                    line = raw.decode('utf-8', errors='ignore').strip()
+                    if not line.startswith('idx='):
+                        continue
+                    m = ESP_JOY_LINE.match(line)
+                    if m:
+                        latest_match = m
+
+                if latest_match is None:
+                    continue
+                m = latest_match
+
+                _dpad_s, buttons_s, lx, ly, rx, ry, brake, throttle = m.groups()
+                buttons = int(buttons_s, 16)
+                l1_held = bool(buttons & L1_BIT)
+
+                if not l1_held:
+                    if self._l1_was_held:
+                        self._l1_release_time = time.monotonic()
+                        self._l1_was_held = False
+                        self.get_logger().info(
+                            f"L1 released — zero window {self._ZERO_WINDOW_S}s"
+                        )
+                    if self._l1_release_time is not None:
+                        elapsed = time.monotonic() - self._l1_release_time
+                        if elapsed < self._ZERO_WINDOW_S:
+                            self.pub.publish(Joy())
                     continue
 
-                vals = self.parse_line_to_vals(line)
-                if vals is None:
-                    continue
-
+                self._l1_was_held = True
                 msg = Joy()
-                # Map UART values to Joy message
-                msg.right_stick_right = vals[BUTTONS["right_stick_right"]]
-                msg.right_stick_forward = vals[BUTTONS["right_stick_forward"]]
-                msg.left_stick_right = vals[BUTTONS["left_stick_right"]]
-                msg.left_stick_forward = vals[BUTTONS["left_stick_forward"]]
-                msg.select = vals[BUTTONS["select"]] == 1
-                msg.start = vals[BUTTONS["start"]] == 1
-                msg.x = vals[BUTTONS["x"]] == 1
-                msg.square = vals[BUTTONS["square"]] == 1
-                msg.triangle = vals[BUTTONS["triangle"]] == 1
-                msg.circle = vals[BUTTONS["circle"]] == 1
-                msg.l1 = vals[BUTTONS["l1"]] == 1
-                msg.l2 = vals[BUTTONS["l2"]]
-                msg.r1 = vals[BUTTONS["r1"]] == 1
-                msg.r2 = vals[BUTTONS["r2"]]
-                msg.up = vals[BUTTONS["up"]] == 1
-                msg.down = vals[BUTTONS["down"]] == 1
-                msg.left = vals[BUTTONS["left"]] == 1
-                msg.right = vals[BUTTONS["right"]] == 1
-
+                msg.left_stick_right    = int(lx)
+                msg.left_stick_forward  = int(ly)
+                msg.right_stick_right   = int(rx)
+                msg.right_stick_forward = int(ry)
+                msg.l1 = True
+                msg.l2 = int(brake)
+                msg.r2 = int(throttle)
                 self.pub.publish(msg)
 
             except Exception as e:
@@ -167,38 +182,6 @@ class JoyController(Node):
                 else:
                     crc = (crc << 1) & 0xFFFF
         return crc
-
-    def check_message(self, message: str) -> tuple[bool, list[int]]:
-        """Validate and parse a UART message with CRC.
-
-        The expected format is: "RX,RY,Right,Left,Select,Licht,GPS,CRC".
-
-        Args:
-            message (str): Raw UART message.
-
-        Returns:
-            tuple[bool, list[int]]: A tuple where the first element indicates
-                if the message is valid, and the second element is the list of
-                integer values.
-        """
-        parts = message.strip().split(',')
-        if len(parts) < 8:  # ???
-            return False, []
-
-        # CRC is the last field
-        crc_received = int(parts[-1], 16)
-        data_str = ','.join(parts[:-1])
-        data_bytes = data_str.encode('ascii')
-
-        # Compute CRC
-        crc_calc = self.crc16_ccitt(data_bytes)
-
-        if crc_calc != crc_received:
-            return False, []
-
-        # Convert remaining fields to int
-        values = [int(x) for x in parts[:-1]]
-        return True, values
 
     def _light_control_callback(self, msg: Bool):
         """Handle light control command from robot_controller.

@@ -1,7 +1,11 @@
 joy_controller:
   ros__parameters:
-    port: "/dev/ttyTHS1"
-    baudrate: 19200
+    # Orin NX ttyTHS1 RX corrupts 19200-baud frames (serial-tegra driver). Routed via
+    # ESP UART0 over its onboard CP2102 USB bridge, which prints debug text @115200.
+    # /dev/esp_joy is a stable udev symlink (see /etc/udev/rules.d/99-esp-joy.rules)
+    # pinned by USB vendor/product/serial so we survive ttyUSBN re-enumeration.
+    port: "/dev/esp_joy"
+    baudrate: 115200
     topic_output: "/joy_drive_raw"
     topic_light_control: "/control/light"
     topic_charging_control: "/control/enable_charging"

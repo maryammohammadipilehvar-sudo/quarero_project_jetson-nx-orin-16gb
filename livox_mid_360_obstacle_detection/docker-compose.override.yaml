@@ -1,0 +1,4 @@
+services:
+  ros2_livox:
+    environment:
+      - ROS_DOMAIN_ID=99

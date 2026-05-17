@@ -1,0 +1,4 @@
+services:
+  realsense:
+    environment:
+      - ROS_DOMAIN_ID=99

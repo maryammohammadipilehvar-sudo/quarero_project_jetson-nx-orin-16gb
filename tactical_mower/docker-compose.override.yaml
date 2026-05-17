@@ -1,0 +1,13 @@
+services:
+  web_app:
+    environment:
+      ROS_DOMAIN_ID: "99"
+  ros2:
+    environment:
+      ROS_DOMAIN_ID: "99"
+    devices:
+      # ESP joy chain: Orin ttyTHS1 RX corrupts 19200-baud frames; routed via CP2102 USB-UART.
+      # /dev/esp_joy is a stable udev symlink (/etc/udev/rules.d/99-esp-joy.rules) pinning
+      # the CP2102 (idVendor 10c4, idProduct ea60, serial 0001) so the mapping survives
+      # USB re-enumeration. Docker resolves the symlink at container start.
+      - /dev/esp_joy:/dev/esp_joy

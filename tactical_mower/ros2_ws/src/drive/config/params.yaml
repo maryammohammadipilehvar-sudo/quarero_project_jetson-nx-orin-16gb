@@ -17,7 +17,7 @@ robot_controller:
 roboclaw_wrapper:
   ros__parameters:
     drive_acceleration_factor: 0.8        # scaling factor for acceleration
-    velocity_timeout: 2.0                 # max time [s] before motors stop without new command
+    velocity_timeout: 0.3                 # [s] /cmd_drive silence before watchdog brakes; gamepad publishes ~10 Hz so 0.3s = 3x margin
     baud_rate: 115200
     device: "/dev/ttyACM0"
     addresses: [128]                 # left and right motor controllers

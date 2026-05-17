@@ -16,7 +16,7 @@ from typing import Optional, Tuple, List
 from time import time
 
 from sensor_msgs.msg import NavSatFix
-from geometry_msgs.msg import PoseStamped, Quaternion, Point
+from geometry_msgs.msg import PoseStamped, Quaternion, Point, Vector3Stamped
 from nav_msgs.msg import Odometry, OccupancyGrid
 from interfaces.msg import CommandDrive, GeoPath, ObstacleSectors
 from interfaces.srv import CommandControl, WaypointService, GetScheduleAction
@@ -235,6 +235,14 @@ class TacticalWpFollowerNode(Node):
         # State
         self._last_gps: Optional[Tuple[float, float, float]] = None
         self._last_orientation: Optional[Quaternion] = None
+        # Cached yaw (rad) from /fixposition/ypr.vector.x (ENU, 0=east).
+        # The quaternion in /fixposition/odometry_enu is NOT a usable heading
+        # source (verified 2026-05-17: yaw spans ±180° randomly while the RTK
+        # moving-baseline heading varies coherently with actual motion).
+        # _get_current_pose_map() overrides pose.orientation with this cached
+        # yaw when available.
+        self._last_yaw_rad: Optional[float] = None
+        self._yaw_override_warned: bool = False
         self._obstacle_detected = False
         self._occupancy_grid: Optional[OccupancyGrid] = None  # Latest OccupancyGrid from obstacle detection
         self._obstacle_sectors_msg: Optional[ObstacleSectors] = None  # Latest obstacle sectors from sector publisher
@@ -309,6 +317,7 @@ class TacticalWpFollowerNode(Node):
         # Alternative: /fixposition/odometry_enu_smooth (from FP_A-ODOMSH) is smoothed but may have latency
         # The direct odometry_enu is preferred for precision and real-time control
         self.create_subscription(Odometry, '/fixposition/odometry_enu', self._odom_callback, 10)
+        self.create_subscription(Vector3Stamped, '/fixposition/ypr', self._ypr_callback, 10)
         self.create_subscription(FusionEpoch, '/fixposition/fusion', self._fusion_callback, 10)
         self.create_subscription(Point, '/tactical/control/charging/dock', self._dock_callback, 10)
         self.create_subscription(Bool, '/tactical/control/charging/undock', self._undock_callback, 10)
@@ -1708,7 +1717,7 @@ class TacticalWpFollowerNode(Node):
     def _odom_callback(self, msg: Odometry):
         """Store orientation and update speed estimate from odometry."""
         self._last_orientation = msg.pose.pose.orientation
-        
+
         # Update speed estimator with GPS/fusion velocity
         velocity = msg.twist.twist.linear
         self._speed_estimator.update_from_gps(velocity.x, velocity.y, velocity.z)
@@ -1735,6 +1744,21 @@ class TacticalWpFollowerNode(Node):
             # First position reading - initialize
             self._last_known_position_enu = current_position_enu
     
+    def _ypr_callback(self, msg: Vector3Stamped):
+        """Cache RTK dual-antenna yaw (rad) from /fixposition/ypr.
+
+        Per fixposition_driver/data_to_ros2.cpp:221, the Vector3 is filled in
+        the order "yaw pitch roll" wrt the ENU frame — so:
+          vector.x = yaw  (this is what we want)
+          vector.y = pitch
+          vector.z = roll
+        Yaw is in radians, 0 = east, +π/2 = north (ENU convention).
+        """
+        try:
+            self._last_yaw_rad = float(msg.vector.x)
+        except Exception as e:
+            self.get_logger().error(f"YPR callback error: {e}")
+
     def _fusion_callback(self, msg: FusionEpoch):
         """Handle fusion status updates for RTK monitoring."""
         try:
@@ -1868,11 +1892,11 @@ class TacticalWpFollowerNode(Node):
         
         self.get_logger().info(f"Waypoint service called: '{route_name}' - {len(waypoints)} waypoints, mode={mode} (command_id: {command_id})")
         
-        # Convert Point[] to GeoPath format
+        # Convert Point[] to GeoPath format. GeoPath has no route_name field —
+        # route_name is tracked separately in _current_route below.
         geopath = GeoPath()
         geopath.mode = mode
-        geopath.route_name = route_name
-        
+
         for point in waypoints:
             geopath.waypoints.append(point)
         
@@ -1884,24 +1908,32 @@ class TacticalWpFollowerNode(Node):
             self._current_route = None  # Clear current route when stopped
             response.message = "Mission stopped"
         else:
-            # DockingController removed - state machine handles state transitions
-            self._current_route = None  # Clear current route tracking
-            
-            # Convert waypoints and start following
+            # Dispatch through the same path the scheduler uses. That handles
+            # map-origin setup, GPS→map transform, set_mode/set_waypoints, and
+            # the is_active() sanity check. Manually unrolling those steps here
+            # is what caused the previous _waypoint_service crash.
             if len(waypoints) > 0:
-                waypoint_list = []
-                for point in waypoints:
-                    waypoint_list.append((point.x, point.y, point.z))  # lat, lon, alt
-                
-                if mode == GeoPath.LOOP:
-                    self._waypoint_follower.set_waypoints(waypoint_list, WaypointMode.LOOP)
-                elif mode == GeoPath.PING_PONG:
-                    self._waypoint_follower.set_waypoints(waypoint_list, WaypointMode.PING_PONG)
+                current_state = self._robot_state_machine.get_state()
+                if current_state in [RobotState.DOCKED, RobotState.CHARGING]:
+                    # Robot is on the dock — undock first, then NAVIGATING will
+                    # pick up _pending_geopath. Reuse the scheduler path so the
+                    # same docked-recovery + safety gates apply.
+                    class _SyntheticScheduleResponse:
+                        pass
+                    synth = _SyntheticScheduleResponse()
+                    synth.waypoints = list(geopath.waypoints)
+                    synth.geopath_mode = geopath.mode
+                    synth.route_name = route_name
+                    self.get_logger().info(
+                        f"Waypoint service: state={current_state.name}, triggering undocking before route '{route_name}'"
+                    )
+                    self._trigger_undocking_for_schedule(synth)
+                    response.message = f"Undocking; route '{route_name}' queued ({len(waypoints)} wp)"
                 else:
-                    self._waypoint_follower.set_waypoints(waypoint_list, WaypointMode.ONCE)
-                
-                response.message = f"Waypoints set: {len(waypoints)} points, mode={mode}"
+                    self._start_navigation_directly(geopath, route_name)
+                    response.message = f"Waypoints set: {len(waypoints)} points, mode={mode}"
             else:
+                self._current_route = None
                 response.message = "No waypoints provided"
         
         # Track mission info when waypoints set via service (for monitoring only, not persistence)
@@ -1953,6 +1985,8 @@ class TacticalWpFollowerNode(Node):
         Returns:
             PoseStamped in map frame, or None if both TF and GPS data are unavailable
         """
+        pose: Optional[PoseStamped] = None
+
         # Try TF-based lookup first (preferred method)
         try:
             tf_timeout = self.get_parameter('tf_timeout').value
@@ -1961,37 +1995,48 @@ class TacticalWpFollowerNode(Node):
                 global_frame="map",
                 timeout=tf_timeout
             )
-            if pose is not None:
-                return pose
         except Exception as e:
             self.get_logger().debug(
                 f"TF-based pose lookup failed: {e}, falling back to GPS-based calculation"
             )
-        
-        # Fallback to GPS-based calculation (for compatibility)
-        if self._last_gps is None or self._last_orientation is None:
-            return None
-        
-        # Check if map origin is set before attempting GPS-based calculation
-        if self._transform_manager.get_map_origin() is None:
-            self.get_logger().debug(
-                "Map origin not set yet, cannot compute GPS-based pose. Waiting for map origin to be set."
+            pose = None
+
+        if pose is None:
+            # Fallback to GPS-based calculation (for compatibility)
+            if self._last_gps is None or self._last_orientation is None:
+                return None
+            if self._transform_manager.get_map_origin() is None:
+                self.get_logger().debug(
+                    "Map origin not set yet, cannot compute GPS-based pose. Waiting for map origin to be set."
+                )
+                return None
+            x, y, z = self._transform_manager.gps_to_map(
+                self._last_gps[0], self._last_gps[1], self._last_gps[2]
             )
-            return None
-        
-        # Use transform_manager.gps_to_map() to ensure consistency with map origin (FP_ENU0)
-        x, y, z = self._transform_manager.gps_to_map(
-            self._last_gps[0], self._last_gps[1], self._last_gps[2]
-        )
-        
-        pose = PoseStamped()
-        pose.header.stamp = self.get_clock().now().to_msg()
-        pose.header.frame_id = "map"
-        pose.pose.position.x = x
-        pose.pose.position.y = y
-        pose.pose.position.z = z
-        pose.pose.orientation = self._last_orientation
-        
+            pose = PoseStamped()
+            pose.header.stamp = self.get_clock().now().to_msg()
+            pose.header.frame_id = "map"
+            pose.pose.position.x = x
+            pose.pose.position.y = y
+            pose.pose.position.z = z
+            pose.pose.orientation = self._last_orientation
+
+        # Override orientation with RTK dual-antenna yaw if available.
+        # The odom/TF quaternion has been observed to be unreliable (random
+        # ±180° yaw) while /fixposition/ypr.z is stable; see RCA in this branch.
+        if self._last_yaw_rad is not None:
+            yaw = self._last_yaw_rad
+            pose.pose.orientation.x = 0.0
+            pose.pose.orientation.y = 0.0
+            pose.pose.orientation.z = math.sin(yaw / 2.0)
+            pose.pose.orientation.w = math.cos(yaw / 2.0)
+        elif not self._yaw_override_warned:
+            self.get_logger().warn(
+                "No /fixposition/ypr yet — using odometry quaternion as heading "
+                "(unreliable). Override will engage once first ypr message arrives."
+            )
+            self._yaw_override_warned = True
+
         return pose
     
     def _is_at_charge_position(self, tolerance: Optional[float] = None) -> bool:

@@ -1062,6 +1062,28 @@
             }
         };
     }
+        async function startSelectedRouteNow() {
+            const routeName = document.getElementById('route-select').value;
+            if (!routeName) {
+                alert('Bitte erst eine Route auswählen!');
+                return;
+            }
+            if (!confirm(`Route "${routeName}" jetzt starten?\n\nHinweis: Autonomer Betrieb muss aktiviert sein, sonst fährt der Roboter nicht.`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/routes/start_now/${encodeURIComponent(routeName)}`, { method: 'POST' });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert(`✅ Route '${data.route}' gestartet (${data.waypoints} Wegpunkte).\n\nDen autonomen Betrieb einschalten, falls noch nicht aktiv.`);
+                } else {
+                    alert('❌ ' + (data.message || 'Unbekannter Fehler'));
+                }
+            } catch (e) {
+                alert('❌ Netzwerkfehler: ' + e.message);
+            }
+        }
+
         async function deleteCurrentRoute() {
             const routeName = document.getElementById('route-select').value;
             
@@ -1080,15 +1102,24 @@
             if (data.status === 'success') {
                 // Liste neu laden
                 await loadRoutes();
-                
+
                 // Karte aufräumen
                 if (routePath) map.removeLayer(routePath);
                 routeMarkers.forEach(m => map.removeLayer(m));
                 routeMarkers = [];
                 currentRoute = null;
                 document.getElementById('route-select').value = '';
-                
-                alert('✅ Route gelöscht!');
+
+                const cleaned = Array.isArray(data.cleaned_schedules) ? data.cleaned_schedules : [];
+                const deact   = Array.isArray(data.deactivated_schedules) ? data.deactivated_schedules : [];
+                let msg = '✅ Route gelöscht!';
+                if (cleaned.length) {
+                    msg += `\n\n• Aus ${cleaned.length} Zeitplan/Zeitplänen entfernt: ${cleaned.join(', ')}`;
+                }
+                if (deact.length) {
+                    msg += `\n• ${deact.length} Zeitplan/Zeitpläne deaktiviert (keine Routen mehr): ${deact.join(', ')}`;
+                }
+                alert(msg);
             } else {
                 // Fehlermeldung vom Backend anzeigen
                 alert('❌ ' + data.message);

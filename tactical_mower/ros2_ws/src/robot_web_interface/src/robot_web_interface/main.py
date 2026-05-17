@@ -252,6 +252,7 @@ async def lifespan(app: FastAPI):
         control.init_control_router(ros_node, connection_manager)
         settings.init_settings_router(ros_node)
         scheduler.init_scheduler_router(ros_node, connection_manager)
+        routes.init_routes_router(ros_node)
         
         # Start ROS2 in separate thread
         print("Starting ROS2 executor thread")

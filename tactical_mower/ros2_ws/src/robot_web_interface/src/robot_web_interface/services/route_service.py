@@ -84,30 +84,51 @@ def save_route(route_data: Dict) -> tuple[bool, str, Optional[str]]:
         return False, str(e), None
 
 
-def delete_route(route_name: str, schedules_file: Path) -> tuple[bool, str]:
+def delete_route(route_name: str, schedules_file: Path) -> tuple[bool, str, dict]:
     """
-    Delete route if not used in any schedule
-    
-    Returns: (success, message)
+    Delete route and cascade-remove it from all schedules.
+
+    For each schedule that references this route, the route entry is removed.
+    Schedules whose route list becomes empty are deactivated (active=false) so
+    they don't run with no work to do — operator settings (weekdays, times,
+    thresholds) are preserved for later re-use.
+
+    Returns: (success, message, summary)
+        summary keys:
+          cleaned_schedules     – schedule_ids that had this route removed
+          deactivated_schedules – schedule_ids whose route list became empty
     """
+    summary = {"cleaned_schedules": [], "deactivated_schedules": []}
     try:
         route_file = ROUTES_DIR / f"{route_name}.yaml"
         if not route_file.exists():
-            return False, "Route nicht gefunden"
-        
+            return False, "Route nicht gefunden", summary
+
         if schedules_file.exists():
             with open(schedules_file) as f:
                 schedules_data = yaml.safe_load(f) or {}
-                schedules = schedules_data.get("schedules", [])
-                
-                for schedule in schedules:
-                    routes = schedule.get("routes", [])
-                    for route in routes:
-                        if route.get("route_name") == route_name:
-                            return False, "Route wird in Schedule genutzt. Schedule löschen und erneut versuchen"
-        
+            schedules = schedules_data.get("schedules", [])
+            changed = False
+            for schedule in schedules:
+                routes = schedule.get("routes", []) or []
+                kept = [r for r in routes if r.get("route_name") != route_name]
+                if len(kept) != len(routes):
+                    schedule["routes"] = kept
+                    sid = schedule.get("schedule_id", "")
+                    summary["cleaned_schedules"].append(sid)
+                    if not kept and schedule.get("active", False):
+                        schedule["active"] = False
+                        summary["deactivated_schedules"].append(sid)
+                    changed = True
+            if changed:
+                schedules_data["schedules"] = schedules
+                with open(schedules_file, 'w') as f:
+                    yaml.dump(schedules_data, f, default_flow_style=False,
+                              allow_unicode=True, sort_keys=False)
+                    f.flush()
+
         route_file.unlink()
-        return True, "success"
+        return True, "success", summary
     except Exception as e:
-        return False, str(e)
+        return False, str(e), summary
 

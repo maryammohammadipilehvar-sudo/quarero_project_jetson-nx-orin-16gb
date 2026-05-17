@@ -1,0 +1,9 @@
+loop_mode: false
+name: mar1
+waypoints:
+- altitude: 0
+  latitude: 48.6546840853932
+  longitude: 9.226283259462987
+- altitude: 0
+  latitude: 48.654652386958546
+  longitude: 9.226268604397776

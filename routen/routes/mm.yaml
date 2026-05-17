@@ -1,0 +1,12 @@
+loop_mode: false
+name: mm
+waypoints:
+- altitude: 0
+  latitude: 48.65456897903391
+  longitude: 9.22405695122272
+- altitude: 0
+  latitude: 48.65460233550962
+  longitude: 9.224060140550138
+- altitude: 0
+  latitude: 48.654581740245575
+  longitude: 9.224032983183863

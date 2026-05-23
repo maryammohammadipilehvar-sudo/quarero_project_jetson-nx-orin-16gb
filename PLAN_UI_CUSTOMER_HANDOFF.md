@@ -78,8 +78,8 @@ Update this table after each commit. Future Claude reads it to find the next ite
 | # | Item | Status | Commit SHA | Notes |
 |---|---|---|---|---|
 | #8 | Accessibility base CSS | **DONE** | `ac61264` | bumped fonts/buttons/inputs in `common.css` — see commit message. Not yet visually approved by operator at 1280×720 / 768×1024. |
-| #2 | Single summary status dot | **DONE** | (next commit) | `common.js` injects a single big dot + plain-German label into `.nav-status-group` on every page; tap expands to show the old 4 badges. Per-page JS still updates the (CSS-hidden) old badges — harmless. Verified: served JS+CSS reflect the changes. Not yet operator-approved visually. |
-| #1 | Dashboard simplification | TODO | — | `index.html` + `index.js` |
+| #2 | Single summary status dot | **DONE** | `b564b11` | `common.js` injects a single big dot + plain-German label into `.nav-status-group` on every page; tap expands to show the old 4 badges. Per-page JS still updates the (CSS-hidden) old badges — harmless. Operator-confirmed visually 2026-05-23. |
+| #1 | Dashboard simplification | **DONE** | (this commit) | Big status card prepended to `.container` in `index.html`: 3.5rem icon + plain-German headline + detail + battery bar + 3 large action buttons (Route starten / Roboter anhalten / Manuell fahren). New `updateMainStatusPanel()` in `index.js` called inside existing `updateRobotStatus(state)` so it gets every WS state push. Computes plain-German status from charging_state, active_route, autonomous_enabled. Existing camera/map/control/log panels untouched — visible below. Responsive: stacks on screens ≤ 700px. |
 | #5 | Notifications cleanup | TODO | — | `settings.html` + new endpoints if needed |
 | #4 | Settings split | TODO | — | `settings.html` reorg, no logic change |
 | #7 | Event thumbnails | TODO | — | `events.html` |

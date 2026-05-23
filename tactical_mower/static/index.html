@@ -46,6 +46,37 @@
 
 
     <div class="container">
+        <!-- UI sprint #1: big status card at top of dashboard.
+             Answers "what is the robot doing right now?" in one glance.
+             See PLAN_UI_CUSTOMER_HANDOFF.md §7 item #1.
+             Updated by updateMainStatusPanel() in index.js. -->
+        <div class="panel main-status-panel" id="main-status-panel">
+            <div class="main-status-top">
+                <div class="main-status-icon" id="main-status-icon" aria-hidden="true">⏳</div>
+                <div class="main-status-text">
+                    <div class="main-status-headline" id="main-status-headline">Roboter startet — bitte warten</div>
+                    <div class="main-status-detail" id="main-status-detail"></div>
+                </div>
+                <div class="main-status-battery">
+                    <div class="main-status-battery-label" id="main-battery-label">Akku —</div>
+                    <div class="main-status-battery-bar" aria-label="Akku-Stand">
+                        <div class="main-status-battery-fill" id="main-battery-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="main-status-actions">
+                <button class="btn-main-action btn-main-go" type="button" onclick="startSelectedRouteNow()">
+                    ▶ Route starten
+                </button>
+                <button class="btn-main-action btn-main-stop" type="button" onclick="stopAutonomous()">
+                    ■ Roboter anhalten
+                </button>
+                <button class="btn-main-action btn-main-manual" type="button" onclick="window.location.href='/control'">
+                    🕹 Manuell fahren
+                </button>
+            </div>
+        </div>
+
         <div class="panel" id="camera-panel">
             <h2>Kamera</h2>
             <div class="camera-controls">

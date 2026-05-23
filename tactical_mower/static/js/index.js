@@ -458,7 +458,80 @@
             }
         }
 
+        // UI sprint #1: drive the big "what is the robot doing right now?" card.
+        // See PLAN_UI_CUSTOMER_HANDOFF.md §7 item #1.
+        function updateMainStatusPanel(state) {
+            const panel = document.getElementById('main-status-panel');
+            if (!panel) return;
+            const iconEl = document.getElementById('main-status-icon');
+            const headlineEl = document.getElementById('main-status-headline');
+            const detailEl = document.getElementById('main-status-detail');
+            const battery = Number(state.battery || state.battery_percentage || 0);
+            const charging = !!(state.charging_state);
+            const autonomousOn = !!(state.autonomous_enabled);
+            const route = state.active_route && typeof state.active_route === 'object'
+                ? state.active_route : null;
+            const routeName = (route && route.name) ? route.name : '';
+            const wpIdx = (route && route.current_waypoint_index != null) ? route.current_waypoint_index : null;
+            const wpTotal = (route && Array.isArray(route.waypoints)) ? route.waypoints.length : null;
+
+            // Compute headline + icon based on what the robot is actually doing,
+            // in order of operational interest (charging > driving > waiting).
+            let icon = '⏳', headline = 'Roboter startet — bitte warten', detail = '';
+            let color = 'gray';
+
+            if (charging) {
+                icon = '🔌';
+                headline = `Lädt — ${Math.round(battery)} %`;
+                detail = 'Roboter steht an der Ladestation.';
+                color = 'green';
+            } else if (routeName) {
+                icon = '🚗';
+                headline = `Fährt Route „${routeName}“`;
+                if (wpIdx != null && wpTotal) {
+                    detail = `Wegpunkt ${wpIdx + 1} von ${wpTotal}`;
+                } else {
+                    detail = 'Autonome Fahrt läuft.';
+                }
+                color = 'blue';
+            } else if (autonomousOn) {
+                icon = '🛡';
+                headline = 'Bereit für autonomen Betrieb';
+                detail = 'Wartet auf Route oder Zeitplan.';
+                color = 'green';
+            } else {
+                icon = '🕹';
+                headline = 'Manueller Modus';
+                detail = 'Autonomie ist aus. Roboter wartet auf Steuerung.';
+                color = 'gray';
+            }
+
+            iconEl.textContent = icon;
+            headlineEl.textContent = headline;
+            detailEl.textContent = detail;
+            panel.classList.remove('main-status-gray', 'main-status-green', 'main-status-blue', 'main-status-red');
+            panel.classList.add(`main-status-${color}`);
+
+            // Battery bar — color stays neutral but red when very low
+            const bLabel = document.getElementById('main-battery-label');
+            const bFill = document.getElementById('main-battery-fill');
+            if (bLabel && bFill) {
+                bLabel.textContent = (battery > 0)
+                    ? `Akku ${Math.round(battery)} %`
+                    : 'Akku —';
+                const pct = Math.max(0, Math.min(100, battery));
+                bFill.style.width = pct + '%';
+                bFill.classList.remove('main-battery-low', 'main-battery-mid', 'main-battery-high');
+                if (pct < 20) bFill.classList.add('main-battery-low');
+                else if (pct < 50) bFill.classList.add('main-battery-mid');
+                else bFill.classList.add('main-battery-high');
+            }
+        }
+
         function updateRobotStatus(state) {
+            // UI sprint #1: feed the simplified top-of-page status card first.
+            try { updateMainStatusPanel(state); } catch (e) { console.warn('main status panel update:', e); }
+
             const battery = state.battery || 0;
             const batteryEl = document.getElementById('battery-level');
             batteryEl.textContent = `${battery}%`;

@@ -760,3 +760,28 @@ input[type="range"]::-moz-range-thumb {
     to { transform: rotate(360deg); }
 }
 .camera-loading-text { font-size: 1.05rem; font-weight: 500; }
+
+/* Camera polish: hide technical-only views by default. Operator clicks the
+   "Technische Ansichten anzeigen" toggle to reveal LiDAR + 3D-Tiefe. */
+.camera-controls .cam-tech-only { display: none; }
+.camera-controls.show-tech .cam-tech-only { display: flex; opacity: 0.85; }
+
+.camera-tech-toggle {
+    margin: -4px 0 12px 0;
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--text-primary);
+    opacity: 0.6;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    min-height: 0;
+    text-align: left;
+    transition: opacity 0.15s, background 0.15s;
+}
+.camera-tech-toggle:hover {
+    opacity: 1;
+    background: var(--bg-alt);
+}

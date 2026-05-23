@@ -1037,6 +1037,26 @@ function hideCameraLoading() {
     if (loading) loading.style.display = 'none';
     if (container) container.classList.remove('loading');
 }
+
+// Camera "Technische Ansichten" toggle — hides LiDAR + 3D-Tiefe by default;
+// technician can reveal them with this button. Persists choice in localStorage.
+function toggleCameraTechViews() {
+    const controls = document.getElementById('camera-controls');
+    const btn = document.getElementById('camera-tech-toggle');
+    if (!controls || !btn) return;
+    const showing = controls.classList.toggle('show-tech');
+    btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
+    btn.textContent = showing
+        ? '⚙ Technische Ansichten ausblenden'
+        : '⚙ Technische Ansichten anzeigen';
+    try { localStorage.setItem('camera_show_tech', showing ? '1' : '0'); } catch (e) {}
+}
+// Apply persisted tech-toggle preference on load.
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        if (localStorage.getItem('camera_show_tech') === '1') toggleCameraTechViews();
+    } catch (e) {}
+});
     function connectCameraWebSocket() {
         // Don't create new connection if we're switching cameras
         if (isSwitchingCamera) {

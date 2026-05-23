@@ -86,31 +86,42 @@
         <div class="panel" id="camera-panel">
             <div class="camera-header">
                 <h2>Live-Kamera</h2>
-                <span id="camera-current-label" class="camera-current-label">Roboter Vorne</span>
+                <span id="camera-current-label" class="camera-current-label">Bodenkamera</span>
             </div>
-            <div class="camera-controls">
-                <button class="camera-btn active" onclick="switchCamera('main', this)" data-cam-label="Roboter Vorne">
-                    <span class="cam-icon">📷</span><span class="cam-label">Roboter Vorne</span>
+            <!-- Labels reflect physical mount points (operator clarification 2026-05-23):
+                   main      → Bodenkamera (down-pointing, was "Roboter Vorne")
+                   rgb2      → Rückkamera (was "Sicherheitskamera")
+                   thermal2  → Frontkamera (was "Wärmebild 2")
+                 LiDAR + 3D-Tiefe are debug-only — hidden behind .show-tech
+                 toggle so only a technician sees them by default. -->
+            <div class="camera-controls" id="camera-controls">
+                <button class="camera-btn active" onclick="switchCamera('main', this)" data-cam-label="Bodenkamera">
+                    <span class="cam-icon">⬇</span><span class="cam-label">Bodenkamera</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('thermal2', this)" data-cam-label="Frontkamera">
+                    <span class="cam-icon">⬆</span><span class="cam-label">Frontkamera</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('rgb2', this)" data-cam-label="Rückkamera">
+                    <span class="cam-icon">⬅</span><span class="cam-label">Rückkamera</span>
                 </button>
                 <button class="camera-btn" onclick="switchCamera('person_detection', this)" data-cam-label="Personenerkennung">
                     <span class="cam-icon">👤</span><span class="cam-label">Personenerkennung</span>
                 </button>
-                <button class="camera-btn" onclick="switchCamera('rgb2', this)" data-cam-label="Sicherheitskamera">
-                    <span class="cam-icon">📺</span><span class="cam-label">Sicherheitskamera</span>
+                <button class="camera-btn" onclick="switchCamera('thermal1', this)" data-cam-label="Wärmebild">
+                    <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild</span>
                 </button>
-                <button class="camera-btn" onclick="switchCamera('thermal1', this)" data-cam-label="Wärmebild 1">
-                    <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild 1</span>
-                </button>
-                <button class="camera-btn" onclick="switchCamera('thermal2', this)" data-cam-label="Wärmebild 2">
-                    <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild 2</span>
-                </button>
-                <button class="camera-btn" onclick="switchCamera('depth_debug', this)" data-cam-label="3D-Tiefe">
+                <!-- Technische Ansichten — hidden until operator clicks the toggle below -->
+                <button class="camera-btn cam-tech-only" onclick="switchCamera('depth_debug', this)" data-cam-label="3D-Tiefe (Technik)">
                     <span class="cam-icon">🌐</span><span class="cam-label">3D-Tiefe</span>
                 </button>
-                <button class="camera-btn debug-only" onclick="switchCamera('lidar_debug', this)" data-cam-label="LiDAR (Technik)">
+                <button class="camera-btn cam-tech-only" onclick="switchCamera('lidar_debug', this)" data-cam-label="LiDAR (Technik)">
                     <span class="cam-icon">🛰</span><span class="cam-label">LiDAR</span>
                 </button>
             </div>
+            <button id="camera-tech-toggle" class="camera-tech-toggle" type="button"
+                    onclick="toggleCameraTechViews()" aria-expanded="false">
+                ⚙ Technische Ansichten anzeigen
+            </button>
 
             <div class="camera-container" id="camera-container">
                 <div id="camera-placeholder" class="camera-placeholder">Kamera nicht verfügbar</div>

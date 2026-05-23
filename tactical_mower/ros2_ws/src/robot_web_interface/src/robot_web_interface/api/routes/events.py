@@ -110,6 +110,34 @@ async def get_event_video(event_id: str, camera_id: str):
     raise HTTPException(status_code=404, detail="Video not found for this camera")
 
 
+@router.get("/{event_id}/frame")
+async def get_event_frame(event_id: str):
+    """Serve the snapshot frame (frame.jpg) saved at the moment of detection.
+
+    UI sprint #7: used by the Ereignisse-page thumbnail grid. The Jetson 2
+    arrival_detection.py POSTs the JPEG inline and security_arrival.py decodes
+    + saves it as <event_dir>/frame.jpg before doing anything else. So the
+    frame is always present (even if the ringbuffer clip capture later failed).
+    """
+    data = load_event(event_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # frame.jpg lives in the same event dir as metadata.json / *.mp4
+    # event_repository builds the dir relative to its _base_dir
+    from ...services.event_repository import EventRepository
+    repo = EventRepository()
+    frame_path = repo._base_dir / event_id / "frame.jpg"
+    if not frame_path.exists():
+        raise HTTPException(status_code=404, detail="No frame snapshot for this event")
+
+    return FileResponse(
+        path=str(frame_path),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.get("/settings/security")
 async def get_security_settings_endpoint():
     """Expose security-related settings for frontend (email + windows)."""

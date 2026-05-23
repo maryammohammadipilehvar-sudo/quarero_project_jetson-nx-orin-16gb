@@ -898,3 +898,94 @@
             background: var(--accent-blue);
         }
 
+
+/* UI sprint #7: thumbnail-grid view for Ereignisübersicht.
+ * Overrides the prior row layout so .event-list flows as cards.
+ * See PLAN_UI_CUSTOMER_HANDOFF.md §7 item #7. */
+.event-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    grid-template-rows: none !important;
+}
+.event-item.event-card {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto auto;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--bg-panel);
+    border: 2px solid var(--border-light);
+    border-radius: 10px;
+    transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+}
+.event-item.event-card:hover {
+    border-color: var(--brand-blue);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.event-item.event-card.active {
+    border-color: var(--brand-blue);
+    background: var(--accent-blue);
+}
+.event-item.event-card.edit-mode {
+    grid-template-columns: 30px 1fr !important;
+}
+
+.event-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #1a1a1a;
+    overflow: hidden;
+}
+.event-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.event-thumb-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 0.95rem;
+    background: #1a1a1a;
+}
+
+.event-card-label {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    padding: 10px 14px 4px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.event-card-emoji {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+.event-card-time {
+    padding: 0 14px 12px 14px;
+    color: var(--text-primary);
+    opacity: 0.75;
+    font-size: 0.95rem;
+}
+.event-item.event-card .event-flags {
+    padding: 0 14px 12px 14px;
+    flex-direction: row;
+}
+
+/* Edit-mode checkbox sits above the thumbnail */
+.event-item.event-card.edit-mode .event-checkbox-wrapper {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(255,255,255,0.92);
+    padding: 4px 6px;
+    border-radius: 4px;
+    z-index: 2;
+}

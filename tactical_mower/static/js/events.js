@@ -208,15 +208,11 @@
 
             eventsForDay.forEach(event => {
                 const item = document.createElement('div');
-                item.className = 'event-item';
-                if (editMode) {
-                    item.classList.add('edit-mode');
-                }
-                if (event.event_id === selectedEventId && !editMode) {
-                    item.classList.add('active');
-                }
+                item.className = 'event-item event-card';  // UI sprint #7: card layout
+                if (editMode) item.classList.add('edit-mode');
+                if (event.event_id === selectedEventId && !editMode) item.classList.add('active');
 
-                // Checkbox for edit mode
+                // Checkbox for edit mode (kept — operator still needs bulk-select)
                 if (editMode) {
                     const checkboxWrapper = document.createElement('div');
                     checkboxWrapper.className = 'event-checkbox-wrapper';
@@ -226,55 +222,73 @@
                     checkbox.checked = selectedEventIds.has(event.event_id);
                     checkbox.addEventListener('change', (e) => {
                         e.stopPropagation();
-                        if (checkbox.checked) {
-                            selectedEventIds.add(event.event_id);
-                        } else {
-                            selectedEventIds.delete(event.event_id);
-                        }
+                        if (checkbox.checked) selectedEventIds.add(event.event_id);
+                        else selectedEventIds.delete(event.event_id);
                         updateSelectedCount();
                     });
                     checkboxWrapper.appendChild(checkbox);
                     item.appendChild(checkboxWrapper);
                 }
 
-                const tag = document.createElement('div');
-                tag.className = 'event-tag ' + (event.event_type || '').toLowerCase();
-                tag.textContent = event.event_type || 'Ereignis';
+                // UI sprint #7: 16:9 thumbnail of the snapshot frame.
+                // Falls back to a German label when no frame.jpg exists
+                // (legacy events from before the arrival pipeline).
+                const thumbWrap = document.createElement('div');
+                thumbWrap.className = 'event-thumb';
+                const thumb = document.createElement('img');
+                thumb.alt = 'Vorschau';
+                thumb.loading = 'lazy';
+                thumb.src = `/api/events/${event.event_id}/frame`;
+                thumb.onerror = () => {
+                    thumb.style.display = 'none';
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'event-thumb-placeholder';
+                    placeholder.textContent = 'Kein Vorschaubild';
+                    thumbWrap.appendChild(placeholder);
+                };
+                thumbWrap.appendChild(thumb);
 
-                const info = document.createElement('div');
+                // Plain-German class label with emoji.
+                // Class info lives in metadata.json, not the index, so we map
+                // by event_type which IS in the index. arrival = generic 🔔.
+                const evType = (event.event_type || '').toLowerCase();
+                const emojiMap = {
+                    'persondetect': '🚶', 'person': '🚶',
+                    'firedetect': '🔥', 'fire': '🔥',
+                    'arrival': '🔔',
+                };
+                const labelMap = {
+                    'persondetect': 'Person', 'person': 'Person',
+                    'firedetect': 'Feuer', 'fire': 'Feuer',
+                    'arrival': 'Ankunft',
+                };
+                const emoji = emojiMap[evType] || '🔔';
+                const labelText = labelMap[evType] || (event.event_type || 'Ereignis');
+
+                const labelEl = document.createElement('div');
+                labelEl.className = 'event-card-label';
+                labelEl.innerHTML = `<span class="event-card-emoji">${emoji}</span> <span>${labelText}</span>`;
+
                 const timeEl = document.createElement('div');
-                timeEl.className = 'event-time';
+                timeEl.className = 'event-card-time';
                 timeEl.textContent = formatDateTimeLocal(event.event_time);
-
-                const deviceEl = document.createElement('div');
-                deviceEl.className = 'event-device';
-                deviceEl.textContent = event.device_name || '';
-
-                info.appendChild(timeEl);
-                info.appendChild(deviceEl);
 
                 const flags = document.createElement('div');
                 flags.className = 'event-flags';
+                if (!event.has_videos) {
+                    const noVid = document.createElement('span');
+                    noVid.className = 'flag warn';
+                    noVid.textContent = 'Kein Video';
+                    flags.appendChild(noVid);
+                }
 
-                const videoFlag = document.createElement('span');
-                videoFlag.className = 'flag ' + (event.has_videos ? 'ok' : 'warn');
-                videoFlag.textContent = event.has_videos ? 'Video' : 'Kein Video';
-
-                const emailFlag = document.createElement('span');
-                emailFlag.className = 'flag ' + (event.email_sent ? 'ok' : 'warn');
-                emailFlag.textContent = event.email_sent ? 'E-Mail' : 'Keine E-Mail';
-
-                flags.appendChild(videoFlag);
-                flags.appendChild(emailFlag);
-
-                item.appendChild(tag);
-                item.appendChild(info);
-                item.appendChild(flags);
+                item.appendChild(thumbWrap);
+                item.appendChild(labelEl);
+                item.appendChild(timeEl);
+                if (flags.childElementCount > 0) item.appendChild(flags);
 
                 if (!editMode) {
-                    item.addEventListener('click', () => {
-                        selectEvent(event.event_id);
-                    });
+                    item.addEventListener('click', () => { selectEvent(event.event_id); });
                 }
 
                 listEl.appendChild(item);

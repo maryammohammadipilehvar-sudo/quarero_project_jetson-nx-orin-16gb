@@ -41,10 +41,28 @@
     </div>
 
     <div class="container">
-        <div class="settings-grid">
+        <!-- UI sprint #4: Basic/Advanced tabs. PLAN §7 item #4.
+             Non-technical users see ~4 cards on first load instead of all 6.
+             Tag each .panel with data-settings-tab="basic" or "advanced";
+             the tab button toggles a class on .settings-grid that hides the
+             non-active tab via CSS. NO HTML reordering needed. -->
+        <div class="settings-tabs" role="tablist" aria-label="Einstellungs-Ansicht">
+            <button type="button" id="settings-tab-btn-basic" class="settings-tab-btn active"
+                    role="tab" aria-selected="true" aria-controls="settings-grid"
+                    onclick="switchSettingsTab('basic')">
+                Grundeinstellungen
+            </button>
+            <button type="button" id="settings-tab-btn-advanced" class="settings-tab-btn"
+                    role="tab" aria-selected="false" aria-controls="settings-grid"
+                    onclick="switchSettingsTab('advanced')">
+                ⚙ Erweitert
+            </button>
+        </div>
+
+        <div class="settings-grid tab-basic" id="settings-grid">
             <!-- Home Position Panel -->
-            <div class="panel">
-                <h2>Ladestation &amp; Home-Position</h2>
+            <div class="panel" data-settings-tab="basic">
+                <h2>Ladestation</h2>
                 <div class="info-box">
                     <strong>Charge Point:</strong> Position der Ladestation. <strong>Home Point:</strong> Wird automatisch 2 m rückwärts vom Charge Point berechnet (Startpunkt für Routen).
                 </div>
@@ -85,7 +103,7 @@
             </div>
 
             <!-- Battery Settings Panel -->
-            <div class="panel">
+            <div class="panel" data-settings-tab="basic">
                 <h2>Akku</h2>
                 <div class="info-box">
                     Schwellwert, ab dem der Roboter automatisch zur Ladestation zurückkehrt.
@@ -137,7 +155,7 @@
         </div>
 
         <!-- Additional Settings Panel (full width) -->
-        <div class="panel">
+        <div class="panel" data-settings-tab="advanced">
             <h2>Erweiterte Einstellungen</h2>
             <div class="info-box">
                 Weitere System- und Fahrparameter.
@@ -217,7 +235,7 @@
         </div>
 
         <!-- Security / Alert Settings Panel (full width) -->
-        <div class="panel">
+        <div class="panel" data-settings-tab="advanced">
             <h2>E-Mail-Benachrichtigungen</h2>
             <div class="info-box">
                 SMTP-Einstellungen für Alarm-E-Mails. Zeitfenster werden auf der Seite „Ereignisse“ konfiguriert.
@@ -304,7 +322,7 @@
              enable toggle, QR + URL, quiet hours, test button. Topic + rotate
              live under "Erweitert" so the operator never sees the word "ntfy"
              or "topic" unless they ask for it. See PLAN §7 item #5. -->
-        <div class="panel">
+        <div class="panel" data-settings-tab="basic">
             <h2>Handy-Alarm</h2>
             <div class="info-box">
                 Bei Person/Fahrzeug-Erkennung klingelt Ihr Handy.
@@ -391,8 +409,19 @@
             </details>
         </div>
 
+        <!-- NEW UI sprint #4: Datenschutz info card (Basic tab) -->
+        <div class="panel" data-settings-tab="basic">
+            <h2>Datenschutz</h2>
+            <div class="info-box">
+                🔒 <strong>Aufzeichnungen werden 72 Stunden nach dem Ereignis automatisch gelöscht</strong>
+                (Videoclips + Foto + Metadaten).
+                Sie können einzelne Ereignisse jederzeit auf der Seite „Ereignisse“ löschen.
+                Detail: <code style="background:#f4f4f4; padding:2px 6px; border-radius:3px;">security_arrival.retention_hours</code> in den Einstellungen.
+            </div>
+        </div>
+
         <!-- Restore Settings Panel -->
-        <div class="panel">
+        <div class="panel" data-settings-tab="advanced">
             <h2>Einstellungen zurücksetzen</h2>
             <div class="info-box">
                 <strong>Hinweis:</strong> Die ausgewählten Einstellungen werden unwiderruflich gelöscht.
@@ -518,6 +547,33 @@
     <script src="/static/js/settings.js"></script>
 <!-- Gemeinsame Scripts -->
 <script src="/static/js/common.js"></script>
+
+<!-- UI sprint #4: tab switcher for Basic/Advanced. Persists choice in
+     localStorage so the operator's tab survives page refresh. -->
+<script>
+(function () {
+    const TAB_KEY = "settings_active_tab";
+    window.switchSettingsTab = function (which) {
+        if (which !== "basic" && which !== "advanced") which = "basic";
+        const grid = document.getElementById("settings-grid");
+        const btnBasic = document.getElementById("settings-tab-btn-basic");
+        const btnAdv = document.getElementById("settings-tab-btn-advanced");
+        if (!grid || !btnBasic || !btnAdv) return;
+        grid.classList.toggle("tab-basic", which === "basic");
+        grid.classList.toggle("tab-advanced", which === "advanced");
+        btnBasic.classList.toggle("active", which === "basic");
+        btnAdv.classList.toggle("active", which === "advanced");
+        btnBasic.setAttribute("aria-selected", which === "basic" ? "true" : "false");
+        btnAdv.setAttribute("aria-selected", which === "advanced" ? "true" : "false");
+        try { localStorage.setItem(TAB_KEY, which); } catch (e) {}
+    };
+    document.addEventListener("DOMContentLoaded", () => {
+        let saved = "basic";
+        try { saved = localStorage.getItem(TAB_KEY) || "basic"; } catch (e) {}
+        window.switchSettingsTab(saved);
+    });
+})();
+</script>
 
 <!-- UI sprint #5: Handy-Alarm self-contained JS.
      QR rendering via api.qrserver.com (operator's tablet already has internet

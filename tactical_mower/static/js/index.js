@@ -1038,23 +1038,34 @@ function hideCameraLoading() {
     if (container) container.classList.remove('loading');
 }
 
-// Camera "Technische Ansichten" toggle — hides LiDAR + 3D-Tiefe by default;
-// technician can reveal them with this button. Persists choice in localStorage.
-function toggleCameraTechViews() {
+// Camera tab switcher: 📺 Live vs 🔧 Debug.
+// The previous "Technische Ansichten anzeigen" toggle was replaced with a
+// proper two-tab UI per operator request — LiDAR + 3D-Tiefe live in a
+// completely separate Debug tab now, not mixed in with live cameras.
+function switchCameraTab(tab, btn) {
+    if (tab !== 'live' && tab !== 'debug') tab = 'live';
     const controls = document.getElementById('camera-controls');
-    const btn = document.getElementById('camera-tech-toggle');
-    if (!controls || !btn) return;
-    const showing = controls.classList.toggle('show-tech');
-    btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
-    btn.textContent = showing
-        ? '⚙ Technische Ansichten ausblenden'
-        : '⚙ Technische Ansichten anzeigen';
-    try { localStorage.setItem('camera_show_tech', showing ? '1' : '0'); } catch (e) {}
+    const liveBtn = document.getElementById('cam-tab-btn-live');
+    const debugBtn = document.getElementById('cam-tab-btn-debug');
+    if (!controls) return;
+    controls.classList.toggle('cam-tab-live', tab === 'live');
+    controls.classList.toggle('cam-tab-debug', tab === 'debug');
+    if (liveBtn) {
+        liveBtn.classList.toggle('active', tab === 'live');
+        liveBtn.setAttribute('aria-selected', tab === 'live' ? 'true' : 'false');
+    }
+    if (debugBtn) {
+        debugBtn.classList.toggle('active', tab === 'debug');
+        debugBtn.setAttribute('aria-selected', tab === 'debug' ? 'true' : 'false');
+    }
+    try { localStorage.setItem('camera_active_tab', tab); } catch (e) {}
 }
-// Apply persisted tech-toggle preference on load.
+// Apply persisted tab preference on load (defaults to 'live').
 document.addEventListener('DOMContentLoaded', () => {
     try {
-        if (localStorage.getItem('camera_show_tech') === '1') toggleCameraTechViews();
+        const saved = localStorage.getItem('camera_active_tab') || 'live';
+        const btn = document.getElementById('cam-tab-btn-' + saved);
+        switchCameraTab(saved, btn);
     } catch (e) {}
 });
     function connectCameraWebSocket() {

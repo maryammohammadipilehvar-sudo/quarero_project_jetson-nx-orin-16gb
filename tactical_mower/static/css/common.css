@@ -761,27 +761,39 @@ input[type="range"]::-moz-range-thumb {
 }
 .camera-loading-text { font-size: 1.05rem; font-weight: 500; }
 
-/* Camera polish: hide technical-only views by default. Operator clicks the
-   "Technische Ansichten anzeigen" toggle to reveal LiDAR + 3D-Tiefe. */
-.camera-controls .cam-tech-only { display: none; }
-.camera-controls.show-tech .cam-tech-only { display: flex; opacity: 0.85; }
-
-.camera-tech-toggle {
-    margin: -4px 0 12px 0;
-    padding: 8px 14px;
+/* Camera tabs: 📺 Live vs 🔧 Debug — full split, not just a toggle.
+   Live tab shows the 5 physical cameras; Debug shows LiDAR + 3D-Tiefe.
+   Operator's preference persists in localStorage (camera_active_tab). */
+.camera-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+.cam-tab-btn {
     background: transparent;
     color: var(--text-primary);
-    opacity: 0.6;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
+    border: 2px solid transparent;
+    border-bottom-color: var(--border-light);
+    padding: 8px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
     cursor: pointer;
     min-height: 0;
-    text-align: left;
-    transition: opacity 0.15s, background 0.15s;
+    border-radius: 6px 6px 0 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.camera-tech-toggle:hover {
-    opacity: 1;
-    background: var(--bg-alt);
+.cam-tab-btn:hover { background: var(--bg-alt); }
+.cam-tab-btn.active {
+    color: var(--brand-blue);
+    border-color: var(--brand-blue);
+    border-bottom-color: var(--bg-panel);
+    background: var(--bg-panel);
 }
+
+/* Show only the active tab's section; hide the other.
+   .cam-section uses display:contents so its button children participate
+   directly in the .camera-controls grid (one button per cell). When the
+   section is set to display:none, all its children disappear too. */
+.camera-controls .cam-section { display: contents; }
+.camera-controls.cam-tab-live  .cam-section-debug { display: none; }
+.camera-controls.cam-tab-debug .cam-section-live  { display: none; }

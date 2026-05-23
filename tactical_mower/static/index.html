@@ -88,40 +88,52 @@
                 <h2>Live-Kamera</h2>
                 <span id="camera-current-label" class="camera-current-label">Bodenkamera</span>
             </div>
-            <!-- Labels reflect physical mount points (operator clarification 2026-05-23):
-                   main      → Bodenkamera (down-pointing, was "Roboter Vorne")
-                   rgb2      → Rückkamera (was "Sicherheitskamera")
-                   thermal2  → Frontkamera (was "Wärmebild 2")
-                 LiDAR + 3D-Tiefe are debug-only — hidden behind .show-tech
-                 toggle so only a technician sees them by default. -->
-            <div class="camera-controls" id="camera-controls">
-                <button class="camera-btn active" onclick="switchCamera('main', this)" data-cam-label="Bodenkamera">
-                    <span class="cam-icon">⬇</span><span class="cam-label">Bodenkamera</span>
+            <!-- Two-tab layout (operator clarification 2026-05-23):
+                   📺 Live    → physical cameras the operator/customer cares about
+                   🔧 Debug   → technician-only views (LiDAR grid, RealSense depth)
+                 Switching tabs swaps which button set is visible; both share
+                 the same .camera-container below. -->
+            <div class="camera-tabs" role="tablist" aria-label="Kamera-Ansicht">
+                <button id="cam-tab-btn-live" class="cam-tab-btn active" type="button"
+                        role="tab" aria-selected="true"
+                        onclick="switchCameraTab('live', this)">
+                    📺 Live
                 </button>
-                <button class="camera-btn" onclick="switchCamera('thermal2', this)" data-cam-label="Frontkamera">
-                    <span class="cam-icon">⬆</span><span class="cam-label">Frontkamera</span>
-                </button>
-                <button class="camera-btn" onclick="switchCamera('rgb2', this)" data-cam-label="Rückkamera">
-                    <span class="cam-icon">⬅</span><span class="cam-label">Rückkamera</span>
-                </button>
-                <button class="camera-btn" onclick="switchCamera('person_detection', this)" data-cam-label="Personenerkennung">
-                    <span class="cam-icon">👤</span><span class="cam-label">Personenerkennung</span>
-                </button>
-                <button class="camera-btn" onclick="switchCamera('thermal1', this)" data-cam-label="Wärmebild">
-                    <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild</span>
-                </button>
-                <!-- Technische Ansichten — hidden until operator clicks the toggle below -->
-                <button class="camera-btn cam-tech-only" onclick="switchCamera('depth_debug', this)" data-cam-label="3D-Tiefe (Technik)">
-                    <span class="cam-icon">🌐</span><span class="cam-label">3D-Tiefe</span>
-                </button>
-                <button class="camera-btn cam-tech-only" onclick="switchCamera('lidar_debug', this)" data-cam-label="LiDAR (Technik)">
-                    <span class="cam-icon">🛰</span><span class="cam-label">LiDAR</span>
+                <button id="cam-tab-btn-debug" class="cam-tab-btn" type="button"
+                        role="tab" aria-selected="false"
+                        onclick="switchCameraTab('debug', this)">
+                    🔧 Debug
                 </button>
             </div>
-            <button id="camera-tech-toggle" class="camera-tech-toggle" type="button"
-                    onclick="toggleCameraTechViews()" aria-expanded="false">
-                ⚙ Technische Ansichten anzeigen
-            </button>
+            <div class="camera-controls cam-tab-live" id="camera-controls">
+                <!-- 📺 Live tab — physical cameras around the robot -->
+                <div class="cam-section cam-section-live">
+                    <button class="camera-btn active" onclick="switchCamera('main', this)" data-cam-label="Bodenkamera">
+                        <span class="cam-icon">⬇</span><span class="cam-label">Bodenkamera</span>
+                    </button>
+                    <button class="camera-btn" onclick="switchCamera('thermal2', this)" data-cam-label="Frontkamera">
+                        <span class="cam-icon">⬆</span><span class="cam-label">Frontkamera</span>
+                    </button>
+                    <button class="camera-btn" onclick="switchCamera('rgb2', this)" data-cam-label="Rückkamera">
+                        <span class="cam-icon">⬅</span><span class="cam-label">Rückkamera</span>
+                    </button>
+                    <button class="camera-btn" onclick="switchCamera('person_detection', this)" data-cam-label="Personenerkennung">
+                        <span class="cam-icon">👤</span><span class="cam-label">Personenerkennung</span>
+                    </button>
+                    <button class="camera-btn" onclick="switchCamera('thermal1', this)" data-cam-label="Wärmebild">
+                        <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild</span>
+                    </button>
+                </div>
+                <!-- 🔧 Debug tab — only visible when operator switches tabs -->
+                <div class="cam-section cam-section-debug">
+                    <button class="camera-btn" onclick="switchCamera('depth_debug', this)" data-cam-label="3D-Tiefe (Debug)">
+                        <span class="cam-icon">🌐</span><span class="cam-label">3D-Tiefe</span>
+                    </button>
+                    <button class="camera-btn" onclick="switchCamera('lidar_debug', this)" data-cam-label="LiDAR (Debug)">
+                        <span class="cam-icon">🛰</span><span class="cam-label">LiDAR</span>
+                    </button>
+                </div>
+            </div>
 
             <div class="camera-container" id="camera-container">
                 <div id="camera-placeholder" class="camera-placeholder">Kamera nicht verfügbar</div>

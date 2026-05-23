@@ -260,11 +260,40 @@ async def lifespan(app: FastAPI):
         ros_thread = threading.Thread(target=ros_spin, daemon=True)
         ros_thread.start()
         print("ROS2 executor thread started")
-        
+
+        # Phase 5: hourly retention sweep — deletes events older than
+        # security_arrival.retention_hours (default 72) from /data/security_events.
+        # Re-reads settings.yaml on every tick so the operator can change the
+        # value via UI without restarting. See DESIGN_ARRIVAL_PIPELINE.md §5.6.
+        import asyncio as _asyncio
+        from pathlib import Path as _Path
+        from .services.retention import retention_loop as _retention_loop
+        from .services.settings_service import get_settings as _get_settings
+
+        def _get_retention_hours():
+            try:
+                return float(
+                    (_get_settings().get("security_arrival") or {}).get("retention_hours", 72)
+                )
+            except Exception:
+                return 72.0
+
+        _retention_task = _asyncio.create_task(_retention_loop(
+            root=_Path("/data/security_events"),
+            get_retention_hours=_get_retention_hours,
+            audit_log_path=_Path("/data/security_events/deletion_audit.log"),
+            interval_s=3600.0,
+        ))
+        print("Retention loop started (hourly sweep)")
+
         yield
-        
+
     finally:
         # Cleanup - use the shared cleanup function
+        try:
+            _retention_task.cancel()
+        except Exception:
+            pass
         cleanup_ros2()
 
 

@@ -298,6 +298,67 @@
             </div>
         </div>
 
+        <!-- Sicherheitsbenachrichtigung (Ankunft → ntfy Push) -->
+        <div class="panel">
+            <h2>Sicherheitsbenachrichtigung (Ankunft)</h2>
+            <div class="info-box">
+                Wenn die Kamera eine Person oder ein Fahrzeug erkennt, wird eine Push-Benachrichtigung
+                an Ihr Handy gesendet. Erforderlich: die kostenlose <strong>ntfy</strong>-App
+                (Play Store, App Store, F-Droid). Kein Konto, keine Anmeldung.
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="notif-enabled">
+                    Benachrichtigungen aktiviert
+                </label>
+                <p class="form-hint">Aktiviert die Push-Benachrichtigung. Falls noch kein Topic vorhanden ist, wird automatisch eines erzeugt.</p>
+            </div>
+
+            <div class="form-group">
+                <label>ntfy Topic</label>
+                <p class="form-hint">Geheime Adresse Ihres Telefons. Wer dieses Topic kennt, kann mitlesen — bei Verdacht „Topic rotieren“.</p>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <code id="notif-topic" style="flex: 1; background: #f4f4f4; padding: 8px; border-radius: 4px; font-family: monospace; word-break: break-all;">noch nicht gesetzt</code>
+                    <button class="btn-secondary" type="button" onclick="rotateNotifTopic()">Topic rotieren</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Abonnement-URL (auf dem Handy öffnen oder in ntfy „Topic abonnieren“ einfügen)</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <code id="notif-subscribe-url" style="flex: 1; background: #f4f4f4; padding: 8px; border-radius: 4px; font-family: monospace; word-break: break-all;">—</code>
+                    <button class="btn-secondary" type="button" onclick="copyNotifUrl()">Kopieren</button>
+                </div>
+                <p class="form-hint" style="margin-top: 8px;">
+                    <strong>Onboarding:</strong> 1) ntfy-App installieren · 2) „+“ tippen · 3) URL einfügen oder Topic-Namen eingeben · 4) auf „Test-Benachrichtigung“ klicken — das Handy sollte vibrieren.
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label>Ruhezeit (keine Anrufe in diesem Fenster — Ereignis wird trotzdem aufgezeichnet)</label>
+                <p class="form-hint">Beide leer lassen für „kein Ruhefenster“. Bei aktiver Ruhezeit wird stattdessen die SMTP-Fallback-Mail gesendet.</p>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                    <div>
+                        <span>Ruhezeit von</span>
+                        <input type="time" id="notif-quiet-from">
+                    </div>
+                    <div>
+                        <span>Ruhezeit bis</span>
+                        <input type="time" id="notif-quiet-to">
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" type="button" onclick="testNotif()">Test-Benachrichtigung senden</button>
+                <button class="btn-save" type="button" onclick="saveNotifSettings()">Speichern</button>
+            </div>
+
+            <div id="notif-success" class="success-message"></div>
+            <div id="notif-error" class="success-message" style="background:#fdd; color:#900;"></div>
+        </div>
+
         <!-- Restore Settings Panel -->
         <div class="panel">
             <h2>Einstellungen zurücksetzen</h2>
@@ -425,5 +486,104 @@
     <script src="/static/js/settings.js"></script>
 <!-- Gemeinsame Scripts -->
 <script src="/static/js/common.js"></script>
+
+<!-- Sicherheitsbenachrichtigung (Ankunft) — self-contained JS for the new panel only.
+     Kept inline to avoid touching the existing settings.js until we're sure the API is stable.
+     See DESIGN_ARRIVAL_PIPELINE.md §5.7. -->
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const showOk = (text) => {
+        const el = $("notif-success");
+        el.textContent = text;
+        el.style.display = "block";
+        $("notif-error").style.display = "none";
+        setTimeout(() => { el.style.display = "none"; }, 5000);
+    };
+    const showErr = (text) => {
+        const el = $("notif-error");
+        el.textContent = text;
+        el.style.display = "block";
+        $("notif-success").style.display = "none";
+    };
+
+    function renderState(data) {
+        $("notif-enabled").checked = !!data.enabled;
+        $("notif-topic").textContent = data.topic || "noch nicht gesetzt";
+        $("notif-subscribe-url").textContent = data.subscribe_url || "—";
+        $("notif-quiet-from").value = data.quiet_hours_from || "";
+        $("notif-quiet-to").value = data.quiet_hours_to || "";
+    }
+
+    async function loadNotifSettings() {
+        try {
+            const r = await fetch("/api/settings/notifications");
+            const data = await r.json();
+            if (data.error) { showErr("Laden fehlgeschlagen: " + data.error); return; }
+            renderState(data);
+        } catch (e) {
+            showErr("Laden fehlgeschlagen: " + e);
+        }
+    }
+
+    window.saveNotifSettings = async function () {
+        try {
+            const r = await fetch("/api/settings/notifications", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    enabled: $("notif-enabled").checked,
+                    quiet_hours_from: $("notif-quiet-from").value,
+                    quiet_hours_to: $("notif-quiet-to").value,
+                }),
+            });
+            const data = await r.json();
+            if (data.status !== "success") { showErr("Speichern fehlgeschlagen: " + (data.message || "")); return; }
+            renderState(data);
+            showOk("Einstellungen gespeichert.");
+        } catch (e) {
+            showErr("Speichern fehlgeschlagen: " + e);
+        }
+    };
+
+    window.rotateNotifTopic = async function () {
+        if (!confirm("Topic rotieren? Das alte Topic empfängt danach keine Nachrichten mehr — Sie müssen die ntfy-App neu abonnieren.")) return;
+        try {
+            const r = await fetch("/api/settings/notifications/rotate-topic", { method: "POST" });
+            const data = await r.json();
+            if (data.status !== "success") { showErr("Rotieren fehlgeschlagen: " + (data.message || "")); return; }
+            renderState(data);
+            showOk("Neues Topic erzeugt. ntfy-App neu abonnieren.");
+        } catch (e) {
+            showErr("Rotieren fehlgeschlagen: " + e);
+        }
+    };
+
+    window.testNotif = async function () {
+        try {
+            const r = await fetch("/api/security/notifications/test", { method: "POST" });
+            const data = await r.json();
+            if (data.sent) {
+                showOk(`Test gesendet via ${data.provider} (ref=${data.reference || "—"}). Handy sollte vibrieren.`);
+            } else {
+                showErr("Test fehlgeschlagen: " + (data.error || data.detail || JSON.stringify(data)));
+            }
+        } catch (e) {
+            showErr("Test fehlgeschlagen: " + e);
+        }
+    };
+
+    window.copyNotifUrl = function () {
+        const txt = $("notif-subscribe-url").textContent;
+        if (!txt || txt === "—") { showErr("Keine URL zum Kopieren — zuerst „Benachrichtigungen aktiviert“ einschalten."); return; }
+        navigator.clipboard.writeText(txt).then(
+            () => showOk("URL kopiert."),
+            (e) => showErr("Kopieren fehlgeschlagen: " + e)
+        );
+    };
+
+    document.addEventListener("DOMContentLoaded", loadNotifSettings);
+})();
+</script>
 </body>
 </html>

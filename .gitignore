@@ -38,3 +38,8 @@ ros_bags/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets / env files — never commit. Per DESIGN_ARRIVAL_PIPELINE.md §5.5.
+.env
+**/.env
+**/secrets/

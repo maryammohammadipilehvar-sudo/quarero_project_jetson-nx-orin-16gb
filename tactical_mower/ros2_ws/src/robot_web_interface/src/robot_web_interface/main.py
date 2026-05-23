@@ -33,7 +33,7 @@ from .ros_interface.robot_node import RobotNode
 from .utils.connection_manager import ConnectionManager
 
 # API Routes
-from .api.routes import routes, control, settings, scheduler, events
+from .api.routes import routes, control, settings, scheduler, events, security_arrival
 from .api.websockets import camera, position, robot_state
 
 # Global instances
@@ -253,7 +253,8 @@ async def lifespan(app: FastAPI):
         settings.init_settings_router(ros_node)
         scheduler.init_scheduler_router(ros_node, connection_manager)
         routes.init_routes_router(ros_node)
-        
+        security_arrival.init_security_arrival_router(ros_node)
+
         # Start ROS2 in separate thread
         print("Starting ROS2 executor thread")
         ros_thread = threading.Thread(target=ros_spin, daemon=True)
@@ -276,6 +277,7 @@ app.include_router(control.router)
 app.include_router(settings.router)
 app.include_router(scheduler.router)
 app.include_router(events.router)
+app.include_router(security_arrival.router)
 
 # Static file serving with cache control
 app.mount("/static", CacheControlStaticFiles(directory="/app/static"), name="static")

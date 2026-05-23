@@ -183,6 +183,111 @@ async def save_advanced_settings(advanced_data: dict):
         return {"status": "error", "message": str(e)}
 
 
+# ─── Sicherheitsbenachrichtigung (security_arrival.notifications) ──────────────
+# Operator-editable ntfy.sh topic, enable/disable, quiet hours. The topic itself
+# is NEVER accepted from user input — it's generated server-side on demand to
+# prevent weak operator-chosen topic names. See DESIGN_ARRIVAL_PIPELINE.md §5.7.
+
+import re as _re
+from ...api.routes.security_arrival import generate_topic as _generate_topic
+
+_HHMM_RE = _re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _read_notif_block() -> dict:
+    settings = get_settings()
+    arrival = settings.get("security_arrival") or {}
+    notif = arrival.get("notifications") or {}
+    return {
+        "topic": notif.get("topic", ""),
+        "enabled": bool(notif.get("enabled", False)),
+        "quiet_hours_from": notif.get("quiet_hours_from", "") or "",
+        "quiet_hours_to": notif.get("quiet_hours_to", "") or "",
+        "provider": notif.get("provider", "ntfy"),
+        "server": os.environ.get("NTFY_SERVER", "https://ntfy.sh"),
+    }
+
+
+def _write_notif_block(updates: dict) -> dict:
+    """Merge updates into settings.yaml's security_arrival.notifications block."""
+    settings = get_settings()
+    arrival = settings.get("security_arrival") or {}
+    notif = arrival.get("notifications") or {}
+    notif.update(updates)
+    arrival["notifications"] = notif
+    settings["security_arrival"] = arrival
+    save_settings_data(settings)
+    return _read_notif_block()
+
+
+import os as _os  # local rename so we don't shadow anything
+
+# We import `os` again at module-bottom so the helper above resolves to the same
+# stdlib module (Python caches modules). The shadow `_os` keeps lint clean if the
+# import order ever changes.
+import os
+
+
+@router.get("/notifications")
+async def get_notifications_settings():
+    """Return current notification settings + the QR-encodable subscription URL."""
+    try:
+        block = _read_notif_block()
+        # Subscription URL for the operator to paste into ntfy app or scan as QR
+        topic = block.get("topic", "")
+        server = block.get("server", "https://ntfy.sh").rstrip("/")
+        block["subscribe_url"] = f"{server}/{topic}" if topic else ""
+        return block
+    except Exception as e:
+        return {"topic": "", "enabled": False, "error": str(e)}
+
+
+@router.post("/notifications")
+async def save_notifications_settings(payload: dict):
+    """Update enabled / quiet hours. The topic is NEVER set via this endpoint —
+    use POST /notifications/rotate-topic to (re)generate one."""
+    try:
+        updates: dict = {}
+
+        if "enabled" in payload:
+            updates["enabled"] = bool(payload["enabled"])
+
+        for field in ("quiet_hours_from", "quiet_hours_to"):
+            if field in payload:
+                v = (payload[field] or "").strip()
+                if v and not _HHMM_RE.match(v):
+                    return {"status": "error", "message": f"{field} must be HH:MM (24h) or empty"}
+                updates[field] = v
+
+        # If operator enables notifications but no topic exists, auto-generate one
+        # (per design: "operator can't lock themselves out by checking the box first")
+        if updates.get("enabled"):
+            current = _read_notif_block()
+            if not current.get("topic"):
+                updates["topic"] = _generate_topic()
+
+        new_state = _write_notif_block(updates)
+        server = new_state.get("server", "https://ntfy.sh").rstrip("/")
+        topic = new_state.get("topic", "")
+        new_state["subscribe_url"] = f"{server}/{topic}" if topic else ""
+        return {"status": "success", **new_state}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/notifications/rotate-topic")
+async def rotate_notifications_topic():
+    """Generate a new random topic. Old topic stops receiving — operator must re-subscribe."""
+    try:
+        new_topic = _generate_topic()
+        new_state = _write_notif_block({"topic": new_topic})
+        server = new_state.get("server", "https://ntfy.sh").rstrip("/")
+        new_state["subscribe_url"] = f"{server}/{new_topic}"
+        return {"status": "success", **new_state}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/restore")
 async def restore_settings_endpoint(restore_data: dict):
     """Restore/delete selected settings categories"""

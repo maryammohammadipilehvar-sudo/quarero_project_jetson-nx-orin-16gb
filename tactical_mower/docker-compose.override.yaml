@@ -2,6 +2,10 @@ services:
   web_app:
     environment:
       ROS_DOMAIN_ID: "99"
+    # Loads ARRIVAL_INGEST_TOKEN (and any future secrets) into the container env.
+    # File is gitignored. See DESIGN_ARRIVAL_PIPELINE.md §5.3.
+    env_file:
+      - ./.env
   ros2:
     environment:
       ROS_DOMAIN_ID: "99"

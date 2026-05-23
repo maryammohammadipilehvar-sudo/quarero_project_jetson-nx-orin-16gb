@@ -8,10 +8,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-# IMPORTANT: Keep this in sync with the video_ringbuffer storage_root
-# The ringbuffer node writes clips to /app/ros2_ws/data/security_events inside the ros2 container,
-# which is mounted from ./ros2_ws on the host. The web app container also sees this path.
-EVENTS_DIR = Path("/app/ros2_ws/data/security_events")
+# IMPORTANT: Keep this in sync with video_ringbuffer's storage_root param in
+# system_bringup/launch/controller.launch.py — both containers must resolve to
+# the same host directory. /routen/ is bind-mounted as /data/ in web_app and
+# as /routen/ in ros2; the host path is ~/gits/routen/security_events/.
+# Path candidate list mirrors utils/file_manager._BASE_DIR_CANDIDATES for
+# consistency.
+_EVENTS_DIR_CANDIDATES = [
+    Path("/data/security_events"),    # web_app container mount of ~/gits/routen
+    Path("/routen/security_events"),   # ros2 container mount of the same dir
+]
+EVENTS_DIR = next((p for p in _EVENTS_DIR_CANDIDATES if p.parent.exists()), _EVENTS_DIR_CANDIDATES[0])
 EVENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 

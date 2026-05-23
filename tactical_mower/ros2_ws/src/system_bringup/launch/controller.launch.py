@@ -60,21 +60,25 @@ def generate_launch_description():
         )
     )
 
-    # video_ringbuffer node - handles camera ringbuffers for security events
-    # video_ringbuffer_node = Node(
-    #     package='video_ringbuffer',
-    #     executable='ringbuffer_node',
-    #     name='video_ringbuffer',
-    #     output='screen',
-    #     parameters=[{
-    #        # 'storage_root': '/app/ros2_ws/data/security_events',
-    #        # 'max_total_size_mb': 20480.0,
-    #        # 'pre_event_seconds': 10.0,
-    #        # 'post_event_seconds': 10.0,
-    #        # 'max_buffer_memory_mb': 1024.0,  # Max 1GB for in-memory buffers
-    #        # 'max_frames_per_camera': 300,  # Hard limit on frames per camera
-    #     }]
-    # )
+    # video_ringbuffer node — captures per-camera pre/post-event MP4 clips on /capture_event_clips
+    # storage_root MUST be /routen/security_events so clips land on the host bind-mount, not
+    # the container's ephemeral filesystem. AUDIT HIGH-2 was that this node was disabled
+    # entirely; re-enabled 2026-05-23 as Phase 1 of the arrival-pipeline.
+    # See DESIGN_ARRIVAL_PIPELINE.md §5.4.
+    video_ringbuffer_node = Node(
+        package='video_ringbuffer',
+        executable='ringbuffer_node',
+        name='video_ringbuffer',
+        output='screen',
+        parameters=[{
+            'storage_root': '/routen/security_events',
+            'max_total_size_mb': 20480.0,
+            'pre_event_seconds': 10.0,
+            'post_event_seconds': 10.0,
+            'max_buffer_memory_mb': 1024.0,
+            'max_frames_per_camera': 300,
+        }]
+    )
 
     # eneo_event_publisher node - receives UDP events from Eneo cameras and publishes SecurityAlert
     eneo_event_publisher_node = Node(
@@ -95,6 +99,6 @@ def generate_launch_description():
         drive_launch,
         control_launch,
         fixpos_launch,
-        # video_ringbuffer_node,
+        video_ringbuffer_node,
         eneo_event_publisher_node,
     ])

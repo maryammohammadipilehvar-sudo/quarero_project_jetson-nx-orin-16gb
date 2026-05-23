@@ -886,3 +886,110 @@ input[type="range"]::-moz-range-thumb {
     font-variant-numeric: tabular-nums;
     margin-left: 6px;
 }
+
+/* ─── Dashboard map panel polish (operator request) ───────────────────
+ * Cleaner toolbar, dedicated map buttons, route-info pill, small legend.
+ * JS bindings unchanged — onclick handlers (focusOnHome, toggleMapFullscreen,
+ * #route-info/route-name-display/route-distance writes) still work. */
+.map-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.map-header h2 { margin: 0; }
+.map-position-hint {
+    color: var(--text-primary);
+    opacity: 0.65;
+    font-size: 0.95rem;
+}
+
+.map-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.map-toolbar .map-spacer { flex: 1 1 auto; }
+
+.btn-map-action {
+    background: var(--bg-alt);
+    color: var(--text-primary);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    min-height: var(--btn-min-height);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-map-action:hover {
+    background: var(--accent-blue);
+    border-color: var(--brand-blue);
+}
+
+.route-info-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--accent-blue);
+    color: var(--text-heading);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+}
+.route-info-pill .route-info-icon { font-size: 1.2rem; line-height: 1; }
+.route-info-pill .route-info-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.route-info-pill .route-info-label {
+    color: var(--text-primary);
+    opacity: 0.7;
+    font-weight: 400;
+}
+.route-info-pill .route-name {
+    color: var(--brand-blue);
+    font-weight: 700;
+}
+.route-info-pill .route-distance {
+    color: var(--text-primary);
+    opacity: 0.7;
+}
+
+/* Bump the map's minimum height so it never collapses to nothing when
+   the parent flex chain doesn't impose one. */
+#map { min-height: 360px; border: 1px solid var(--border-light); }
+
+.map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light);
+    color: var(--text-primary);
+    opacity: 0.75;
+    font-size: 0.9rem;
+}
+.map-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.map-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
+}
+.map-legend-dot-blue  { background: var(--brand-blue); }
+.map-legend-dot-green { background: #2ea043; }
+.map-legend-line {
+    width: 20px;
+    height: 3px;
+    background: var(--brand-blue);
+    border-radius: 2px;
+}

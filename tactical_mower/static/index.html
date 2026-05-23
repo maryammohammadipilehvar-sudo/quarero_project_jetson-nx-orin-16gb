@@ -148,17 +148,50 @@
             </div>
         </div>
 
+        <!-- Map panel — polished header + dedicated map-action buttons +
+             route-info pill + small legend. JS bindings unchanged so all
+             existing Leaflet logic keeps working. -->
         <div class="panel" id="map-panel">
-            <h2>Position &amp; Routen</h2>
-            <div class="focus-map">
-                <button class="camera-btn" onclick="focusOnHome()">Karte zentrieren</button>
-                <button class="camera-btn" onclick="toggleMapFullscreen()" id="map-fullscreen-btn" title="Vollbild">⛶ Vollbild</button>
-                <div class="route-info" id="route-info" style="display: none;">
-                    <div class="route-name" id="route-name-display"></div>
-                    <div class="route-distance" id="route-distance"></div>
+            <div class="map-header">
+                <h2>Karte</h2>
+                <span class="map-position-hint">📍 Aktuelle Roboterposition wird live angezeigt</span>
+            </div>
+
+            <div class="map-toolbar">
+                <button class="btn-map-action" type="button" onclick="focusOnHome()">
+                    🎯 Karte zentrieren
+                </button>
+                <button class="btn-map-action" type="button" id="map-fullscreen-btn"
+                        onclick="toggleMapFullscreen()" title="Vollbild ein-/ausschalten">
+                    ⛶ Vollbild
+                </button>
+                <div class="map-spacer"></div>
+                <div class="route-info-pill" id="route-info" style="display: none;">
+                    <span class="route-info-icon">🛣</span>
+                    <span class="route-info-text">
+                        <span class="route-info-label">Aktive Route:</span>
+                        <strong class="route-name" id="route-name-display"></strong>
+                        <span class="route-distance" id="route-distance"></span>
+                    </span>
                 </div>
             </div>
+
             <div id="map"></div>
+
+            <div class="map-legend" aria-label="Karten-Legende">
+                <span class="map-legend-item">
+                    <span class="map-legend-dot map-legend-dot-blue" aria-hidden="true"></span>
+                    Aktuelle Position
+                </span>
+                <span class="map-legend-item">
+                    <span class="map-legend-dot map-legend-dot-green" aria-hidden="true"></span>
+                    Ladestation
+                </span>
+                <span class="map-legend-item">
+                    <span class="map-legend-line" aria-hidden="true"></span>
+                    Aktive Route
+                </span>
+            </div>
         </div>
 
         <div class="panel" id="control-panel">

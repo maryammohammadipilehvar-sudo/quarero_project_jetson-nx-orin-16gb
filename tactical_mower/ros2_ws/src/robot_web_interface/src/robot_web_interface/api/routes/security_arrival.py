@@ -20,11 +20,18 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+try:
+    from zoneinfo import ZoneInfo
+    _HAS_ZONEINFO = True
+except ImportError:
+    _HAS_ZONEINFO = False
 
 from builtin_interfaces.msg import Time as RosTime
 from fastapi import APIRouter, HTTPException, Request, status
@@ -103,6 +110,42 @@ def _check_idempotency(key: tuple) -> Optional[str]:
 
 def _remember_idempotency(key: tuple, event_id: str):
     _idempotency_cache[key] = (event_id, time.monotonic())
+
+
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+
+def _hhmm_to_minutes(s: str) -> Optional[int]:
+    """Parse 'HH:MM' to minute-of-day, or None if invalid/empty."""
+    if not s:
+        return None
+    m = _HHMM_RE.match(s.strip())
+    if not m:
+        return None
+    return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def _is_in_quiet_hours(quiet_from: str, quiet_to: str, tz_name: str = "Europe/Berlin") -> bool:
+    """True if local-now is within the [quiet_from, quiet_to) window.
+
+    Both empty → no quiet window → always False (notifications fire 24/7).
+    Window CAN wrap midnight (e.g. from='17:00' to='09:00' → quiet all night).
+    """
+    start = _hhmm_to_minutes(quiet_from)
+    end = _hhmm_to_minutes(quiet_to)
+    if start is None or end is None:
+        return False
+    if start == end:
+        return False  # degenerate empty window
+    if _HAS_ZONEINFO:
+        now = datetime.now(ZoneInfo(tz_name))
+    else:
+        now = datetime.now()  # local-ish; better than UTC
+    now_min = now.hour * 60 + now.minute
+    if start < end:
+        return start <= now_min < end
+    # wraps midnight
+    return now_min >= start or now_min < end
 
 
 @router.post("/arrival")
@@ -191,10 +234,32 @@ async def receive_arrival(request: Request):
 
     # 1. Dispatch notification IMMEDIATELY (synchronous but fast, ~500ms).
     #    Operator's phone rings within ~3-5s of detection instead of ~2 min.
+    #    Suppressed during quiet hours (event still captured + logged; phone
+    #    stays silent until quiet window ends). SMTP fallback for quiet hours
+    #    is a future enhancement.
     try:
-        notif_topic = (arrival_cfg.get("notifications") or {}).get("topic", "")
-        notif_enabled = bool((arrival_cfg.get("notifications") or {}).get("enabled", False))
-        if notif_enabled and notif_topic:
+        notif_cfg = arrival_cfg.get("notifications") or {}
+        notif_topic = notif_cfg.get("topic", "")
+        notif_enabled = bool(notif_cfg.get("enabled", False))
+        quiet_from = notif_cfg.get("quiet_hours_from", "") or ""
+        quiet_to = notif_cfg.get("quiet_hours_to", "") or ""
+        in_quiet = _is_in_quiet_hours(quiet_from, quiet_to)
+
+        if not notif_enabled:
+            metadata["notification_status"] = "disabled"
+            actions.append("notification_skipped:disabled")
+        elif not notif_topic:
+            metadata["notification_status"] = "no_topic"
+            actions.append("notification_skipped:no_topic")
+        elif in_quiet:
+            metadata["notification_status"] = "suppressed_quiet_hours"
+            metadata["notification_quiet_window"] = f"{quiet_from}-{quiet_to}"
+            actions.append("notification_skipped:quiet_hours")
+            log.info(
+                "notification suppressed for %s — in quiet window %s-%s (event still captured)",
+                event_id, quiet_from, quiet_to,
+            )
+        else:
             alert = ArrivalAlert(
                 event_id=event_id,
                 class_label=class_label,
@@ -210,9 +275,6 @@ async def receive_arrival(request: Request):
             metadata["notification_reference"] = result.reference
             metadata["notification_error"] = result.error
             actions.append("notification_dispatched")
-        else:
-            metadata["notification_status"] = "disabled" if not notif_enabled else "no_topic"
-            actions.append(f"notification_skipped:{metadata['notification_status']}")
         _event_repo.save_event(metadata)
     except Exception as e:
         log.error("notification dispatch exception for %s: %s", event_id, e)
@@ -257,30 +319,20 @@ async def _capture_clip_background(event_id: str, ts_dt: datetime, pre_s: float,
         _event_repo.save_event(meta)
         return
 
-    # Fallback: ringbuffer sometimes returns success=True with empty file_paths
-    # when one of the requested cameras has no publisher. Scan the event dir for
-    # what's actually on disk so the metadata reflects reality.
+    # Always derive video_files from what's actually on disk in the event_dir
+    # — ringbuffer returns paths in its OWN container's view (/routen/...) but
+    # web_app sees the same files as /data/.... FileResponse runs in web_app so
+    # we need web_app's view. event_dir IS /data/security_events/{event_id}/
+    # so glob results are already in the correct form.
     event_dir = _event_repo._base_dir / event_id
-    on_disk = sorted(str(p) for p in event_dir.glob("*.mp4"))
-    if not file_paths and on_disk:
-        log.warning(
-            "[background] ringbuffer returned empty file_paths but found %d .mp4 on disk for %s — using disk scan",
-            len(on_disk), event_id,
-        )
-        file_paths = on_disk
-        camera_ids_out = [Path(p).stem for p in on_disk]
+    on_disk = sorted(event_dir.glob("*.mp4"))
+    video_files = [{"camera_id": p.stem, "path": str(p)} for p in on_disk]
 
-    # Build video_files in the schema events.py expects:
-    # [{"camera_id": "...", "path": "..."}].
-    # Pair file_paths with camera_ids_out positionally; fall back to filename stem.
-    video_files = []
-    for i, path in enumerate(file_paths or []):
-        cid = (
-            camera_ids_out[i]
-            if camera_ids_out and i < len(camera_ids_out) and camera_ids_out[i]
-            else Path(path).stem
+    if not video_files and file_paths:
+        log.warning(
+            "[background] ringbuffer reported %d file_paths but disk scan finds 0 for %s",
+            len(file_paths), event_id,
         )
-        video_files.append({"camera_id": cid, "path": path})
 
     meta = _event_repo.load_event(event_id) or {}
     meta["clip_status"] = "captured" if (success and video_files) else ("failed" if not success else "no_clip")

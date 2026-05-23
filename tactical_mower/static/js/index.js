@@ -981,27 +981,33 @@
 
         function switchCamera(stream, btn) {
     console.log('Switching camera to:', stream);
-    
+
     // Set flag to prevent auto-reconnect
     isSwitchingCamera = true;
-    
+
     currentCameraStream = stream;
-    
+
     // Alle Buttons als inaktiv markieren
     document.querySelectorAll('.camera-btn').forEach(b => {
         b.classList.remove('active');
     });
-    
-    // Geklickten Button aktiv markieren
+
+    // Geklickten Button aktiv markieren + Header-Label aktualisieren
     if (btn) {
         btn.classList.add('active');
+        const labelText = btn.dataset.camLabel || btn.textContent.trim();
+        const headerLabel = document.getElementById('camera-current-label');
+        if (headerLabel) headerLabel.textContent = labelText;
     }
 
-    // WICHTIG: Altes Bild sofort entfernen und Placeholder anzeigen
+    // WICHTIG: Altes Bild sofort entfernen und Lade-Overlay zeigen
     const container = document.getElementById('camera-container');
     const img = document.getElementById('camera-feed');
+    const loading = document.getElementById('camera-loading');
     container.classList.remove('has-frame');
+    container.classList.add('loading');
     img.removeAttribute('src');
+    if (loading) loading.style.display = 'flex';
     lastCameraFrameTime = 0;
     lastDisplayedFrameTimestamp = 0; // Reset frame timestamp when switching cameras
 
@@ -1015,12 +1021,21 @@
         wsCamera.close();
         wsCamera = null;
     }
-    
+
     // Small delay to ensure old connection is fully closed
     setTimeout(() => {
         isSwitchingCamera = false;
         connectCameraWebSocket();
     }, 100);
+}
+
+// UI polish: hide the loading overlay once a frame actually renders.
+// Called from the camera-feed img.onload handler (set up below).
+function hideCameraLoading() {
+    const loading = document.getElementById('camera-loading');
+    const container = document.getElementById('camera-container');
+    if (loading) loading.style.display = 'none';
+    if (container) container.classList.remove('loading');
 }
     function connectCameraWebSocket() {
         // Don't create new connection if we're switching cameras
@@ -1081,6 +1096,7 @@
                     if (modalFeed) modalFeed.src = currentObjectUrl;
                 }
                 container.classList.add('has-frame');
+                hideCameraLoading();
                 lastCameraFrameTime = Date.now();
             } else if (typeof event.data === 'string') {
                 // JSON MODE - legacy format for main camera
@@ -1094,8 +1110,9 @@
                         
                         img.src = 'data:image/jpeg;base64,' + data.data;
                         container.classList.add('has-frame');
+                        hideCameraLoading();
                         lastCameraFrameTime = Date.now();
-                        
+
                         if (data.timestamp) {
                             lastDisplayedFrameTimestamp = data.timestamp;
                         }

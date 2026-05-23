@@ -77,21 +77,50 @@
             </div>
         </div>
 
+        <!-- UI polish (post-sprint): plain-German camera labels with icons,
+             grouped into "Live" + "Technik". Old labels (RGB / Thermal 1 /
+             RGB 2 / LiDAR Debug) were jargon to a non-technical user.
+             Loading overlay (.camera-loading) covers the ~200ms blank
+             gap during WebSocket switch. Aspect-ratio container stops the
+             panel from jumping when streams have different resolutions. -->
         <div class="panel" id="camera-panel">
-            <h2>Kamera</h2>
+            <div class="camera-header">
+                <h2>Live-Kamera</h2>
+                <span id="camera-current-label" class="camera-current-label">Roboter Vorne</span>
+            </div>
             <div class="camera-controls">
-                <button class="camera-btn active" onclick="switchCamera('main', this)">RGB</button>
-                <button class="camera-btn" onclick="switchCamera('person_detection', this)">Person Detection</button>
-                <button class="camera-btn" onclick="switchCamera('thermal1', this)">Thermal 1</button>
-                <button class="camera-btn" onclick="switchCamera('thermal2', this)">Thermal 2</button>
-                <button class="camera-btn" onclick="switchCamera('rgb2', this)">RGB 2</button>
-                <button class="camera-btn debug-only" onclick="switchCamera('lidar_debug', this)">LiDAR Debug</button>
-                <button class="camera-btn" onclick="switchCamera('depth_debug', this)">Tiefe</button>
+                <button class="camera-btn active" onclick="switchCamera('main', this)" data-cam-label="Roboter Vorne">
+                    <span class="cam-icon">📷</span><span class="cam-label">Roboter Vorne</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('person_detection', this)" data-cam-label="Personenerkennung">
+                    <span class="cam-icon">👤</span><span class="cam-label">Personenerkennung</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('rgb2', this)" data-cam-label="Sicherheitskamera">
+                    <span class="cam-icon">📺</span><span class="cam-label">Sicherheitskamera</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('thermal1', this)" data-cam-label="Wärmebild 1">
+                    <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild 1</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('thermal2', this)" data-cam-label="Wärmebild 2">
+                    <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild 2</span>
+                </button>
+                <button class="camera-btn" onclick="switchCamera('depth_debug', this)" data-cam-label="3D-Tiefe">
+                    <span class="cam-icon">🌐</span><span class="cam-label">3D-Tiefe</span>
+                </button>
+                <button class="camera-btn debug-only" onclick="switchCamera('lidar_debug', this)" data-cam-label="LiDAR (Technik)">
+                    <span class="cam-icon">🛰</span><span class="cam-label">LiDAR</span>
+                </button>
             </div>
 
             <div class="camera-container" id="camera-container">
                 <div id="camera-placeholder" class="camera-placeholder">Kamera nicht verfügbar</div>
                 <img id="camera-feed" alt="Kamera Feed" title="Klicken zum Vergrößern" />
+                <!-- Loading overlay: shown during camera switch (~100-500ms gap) and
+                     when no frame has arrived yet for the current stream. -->
+                <div id="camera-loading" class="camera-loading">
+                    <div class="camera-loading-spinner" aria-hidden="true"></div>
+                    <div class="camera-loading-text">Lade Kamera…</div>
+                </div>
                 <div class="camera-expand-hint">⛶ Klicken zum Vergrößern</div>
             </div>
         </div>

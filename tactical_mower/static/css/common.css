@@ -645,3 +645,118 @@ input[type="range"]::-moz-range-thumb {
     color: var(--text-primary);
 }
 
+
+/* ─── Post-sprint polish: dashboard Live-Kamera panel ─────────────────────
+ * Restructures the existing camera-panel with:
+ *   - Header showing the active camera's label (pill style)
+ *   - Compact pill buttons with emoji icon + plain-German label
+ *   - 16:9 aspect-ratio container so panel doesn't jump on resolution change
+ *   - Loading overlay during the ~100-500ms WebSocket-switch gap
+ * Builds on existing #camera-panel structure; no JS rewrite of switching. */
+.camera-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.camera-header h2 { margin: 0; }
+.camera-current-label {
+    display: inline-block;
+    background: var(--accent-blue);
+    color: var(--brand-blue);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.camera-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.camera-controls .camera-btn {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    background: var(--bg-alt);
+    color: var(--text-primary);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    min-height: var(--btn-min-height);
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.camera-controls .camera-btn .cam-icon { font-size: 1.2rem; line-height: 1; }
+.camera-controls .camera-btn:hover {
+    background: var(--accent-blue);
+    border-color: var(--brand-blue);
+}
+.camera-controls .camera-btn.active {
+    background: var(--brand-blue);
+    color: white;
+    border-color: #1d4f8a;
+}
+.camera-controls .camera-btn.debug-only {
+    opacity: 0.7;
+    font-size: 0.85rem;
+}
+
+.camera-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #111;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.camera-container #camera-feed {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: #111;
+}
+.camera-container .camera-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    background: #111;
+    z-index: 1;
+}
+.camera-container.has-frame .camera-placeholder { display: none; }
+
+.camera-loading {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 20, 20, 0.85);
+    color: #fff;
+    z-index: 2;
+    gap: 14px;
+}
+.camera-loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(255,255,255,0.2);
+    border-top-color: var(--brand-blue);
+    border-radius: 50%;
+    animation: camera-spin 0.9s linear infinite;
+}
+@keyframes camera-spin {
+    to { transform: rotate(360deg); }
+}
+.camera-loading-text { font-size: 1.05rem; font-weight: 500; }

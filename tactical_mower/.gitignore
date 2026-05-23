@@ -28,3 +28,5 @@ __pycache__/
 .cursor/
 ros2_ws/ros_bags/
 tactical_mower.code-workspace
+# UI sprint scaffolding — .bak files are working backups, never committed
+*.bak

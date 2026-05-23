@@ -207,43 +207,28 @@
                     </div>
         </div>
 
+        <!-- Activity log panel — Status sub-panel removed (duplicated the
+             main-status card at the top of the page). Log now occupies the
+             full panel width with richer info per entry. -->
         <div class="panel" id="log-panel">
-            <h2>System &amp; Log</h2>
-            
-            <div class="log-grid">
-                <div class="log-left">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 class="section-title" style="margin: 0;">Ereignislog</h3>
-                        <button id="clear-logs-btn" class="btn-clear-logs" onclick="clearLogs()" title="Log leeren">Log leeren</button>
-                    </div>
-                    <div id="event-log"></div>
+            <div class="log-header-row">
+                <h2 style="margin: 0;">Ereignisprotokoll</h2>
+                <div class="log-header-controls">
+                    <span id="log-summary" class="log-summary"></span>
+                    <button id="clear-logs-btn" class="btn-clear-logs" onclick="clearLogs()" title="Log leeren">
+                        🗑 Log leeren
+                    </button>
                 </div>
-
-                <div class="log-right">
-                    <h3 class="section-title">Status</h3>
-                    <div class="robot-status">
-                        <div class="status-card">
-                            <div class="status-content">
-                                <div class="status-label-small">Akku</div>
-                                <div class="status-value-large" id="battery-level">—</div>
-                            </div>
-                        </div>
-                        
-                        <div class="status-card">
-                            <div class="status-content">
-                                <div class="status-label-small">Geschwindigkeit</div>
-                                <div class="status-value-large" id="velocity-value">— m/s</div>
-                            </div>
-                        </div>
-                        
-                        <div class="status-card">
-                            <div class="status-content">
-                                <div class="status-label-small">Verbleibende Einsatzzeit</div>
-                                <div class="status-value-large" id="runtime-value">—</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            </div>
+            <p class="log-hint">Hier erscheinen Systemereignisse: Warnungen, Fehler, Routen-Start/Ende, manuelle Eingriffe. Die letzten 100 Einträge bleiben gespeichert.</p>
+            <div id="event-log" class="event-log-list"></div>
+            <!-- Hidden legacy status spans — kept so old JS that writes here
+                 doesn't crash. The visible status now lives in the
+                 .main-status-panel at the top of the page. -->
+            <div style="display: none;" aria-hidden="true">
+                <span id="battery-level"></span>
+                <span id="velocity-value"></span>
+                <span id="runtime-value"></span>
             </div>
         </div>
     </div>
@@ -313,5 +298,26 @@
         </div>
         <div id="camera-modal-feed-wrapper" style="display:flex;align-items:center;justify-content:center;flex:1;padding-top:48px;width:100%;height:100%;"></div>
     </div>
+<!-- Log panel: live counter under the header.
+     Updates whenever entries are added/removed from #event-log. -->
+<script>
+(function () {
+    function updateLogSummary() {
+        const log = document.getElementById('event-log');
+        const summary = document.getElementById('log-summary');
+        if (!log || !summary) return;
+        const n = log.querySelectorAll('.log-entry').length;
+        if (n === 0) summary.textContent = '';
+        else if (n === 1) summary.textContent = '1 Eintrag';
+        else summary.textContent = `${n} Einträge`;
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        const log = document.getElementById('event-log');
+        if (!log) return;
+        updateLogSummary();
+        new MutationObserver(updateLogSummary).observe(log, { childList: true });
+    });
+})();
+</script>
 </body>
 </html>

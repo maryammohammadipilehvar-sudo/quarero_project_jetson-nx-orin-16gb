@@ -797,3 +797,92 @@ input[type="range"]::-moz-range-thumb {
 .camera-controls .cam-section { display: contents; }
 .camera-controls.cam-tab-live  .cam-section-debug { display: none; }
 .camera-controls.cam-tab-debug .cam-section-live  { display: none; }
+
+/* ─── Dashboard log panel polish (operator request) ───────────────────
+ * Status sub-panel removed (duplicated the main-status-panel at the top
+ * of the page). Log now occupies full width with richer entry styling. */
+.log-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+.log-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.log-summary {
+    color: var(--text-primary);
+    opacity: 0.65;
+    font-size: 0.95rem;
+}
+.log-hint {
+    color: var(--text-primary);
+    opacity: 0.7;
+    font-size: 0.95rem;
+    margin: 0 0 14px 0;
+}
+
+.event-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Empty-state hint when the log has no entries */
+.event-log-list:empty::after {
+    content: "📭 Noch keine Ereignisse — alles ruhig.";
+    display: block;
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-primary);
+    opacity: 0.55;
+    font-size: 1rem;
+    background: var(--bg-alt);
+    border-radius: 8px;
+}
+
+/* Override the legacy .log-entry rule so entries look like proper rows */
+.event-log-list .log-entry {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 10px;
+    align-items: baseline;
+    padding: 10px 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-light);
+    border-left: 4px solid var(--brand-blue);
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+.event-log-list .log-entry .log-timestamp {
+    color: var(--text-primary);
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+.event-log-list .log-entry::before {
+    content: "ℹ️";
+    font-size: 1rem;
+    line-height: 1;
+}
+.event-log-list .log-entry.error {
+    border-left-color: #cf222e;
+    background: #fef6f7;
+}
+.event-log-list .log-entry.error::before { content: "⚠️"; }
+
+.event-log-list .log-entry .log-counter {
+    color: var(--text-primary);
+    opacity: 0.55;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    margin-left: 6px;
+}

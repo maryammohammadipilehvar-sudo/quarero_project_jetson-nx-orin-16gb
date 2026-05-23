@@ -13,6 +13,8 @@ Companion docs (don't duplicate them here):
 - `RCA_2026-05-15_robot_not_driving.md` — UART/deadman/baud diagnosis after Nano→Orin swap
 - `RCA_2026-05-16_joystick_stop_delay.md` — drive cascade + watchdog + brake ramp + DDS domain fix
 - `RCA_2026-05-17_autonomy_session_learning.md` — 10-issue walkthrough that took autonomy from "doesn't move" to "11 cm waypoint accuracy"
+- `DESIGN_ARRIVAL_PIPELINE.md` — full design for the (now-shipped) arrival → ringbuffer → ntfy → 72h-retention pipeline. Phases 1–6 complete as of 2026-05-23.
+- **`PLAN_UI_CUSTOMER_HANDOFF.md`** — IN-PROGRESS sprint plan (2 days) to make the web UI usable by a non-technical 60+ customer. **If you are starting a new session and §6 of that file shows TODOs, that's your work list** — read it before doing anything UI-related.
 
 ---
 

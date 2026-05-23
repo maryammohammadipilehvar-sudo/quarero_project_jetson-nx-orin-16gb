@@ -1,6 +1,21 @@
 # PLAN — UI customer hand-off (2-day sprint)
 
-**Status:** PLAN — APPROVED, NOT STARTED. Operator approved this scope and ordering on 2026-05-23.
+**Status:** ✅ **SHIPPED — 6 of 7 items done, 1 deferred. Sprint closed 2026-05-23.**
+
+Final commits on branch `ui-customer-handoff` (pushed to both `origin` and `nx-orin`):
+- `b5e77d5` docs: 2-day UI customer-handoff sprint plan + mental-model pointer
+- `ac61264` ui: #8 accessibility base CSS pass
+- `b564b11` ui: #2 single summary status dot
+- `952b9ea` ui: #1 dashboard main-status card
+- `a3da37e` ui: #5 Handy-Alarm cleanup — QR, validation, quiet-hours test, connectivity hint
+- `d99ce06` ui: #4 Settings basic/advanced tabs
+- `69078a1` ui: #4 fixup — toggle tab class on `<body>`, not `.settings-grid`
+- `829d51d` ui: #7 Ereignisübersicht thumbnail grid
+- (final) ui: customer hand-off ready — sprint summary
+
+Deferred: **#9 first-launch wizard** — operator on-site at hand-off day 1 (PLAN §4), so they walk the customer through setup verbally. Full spec preserved in §7 #9 for a future session.
+
+`docker-compose.override.yaml` static bind-mount: reverted. `web_app` image rebuilt + recreated; static files now served from the canonical image, not the host bind-mount.
 
 **Pickup rule for a future Claude session:**
 1. Read `CODEBASE_MENTAL_MODEL.md` first (auto-loaded via the SessionStart hook).
@@ -82,8 +97,9 @@ Update this table after each commit. Future Claude reads it to find the next ite
 | #1 | Dashboard simplification | **DONE** | (this commit) | Big status card prepended to `.container` in `index.html`: 3.5rem icon + plain-German headline + detail + battery bar + 3 large action buttons (Route starten / Roboter anhalten / Manuell fahren). New `updateMainStatusPanel()` in `index.js` called inside existing `updateRobotStatus(state)` so it gets every WS state push. Computes plain-German status from charging_state, active_route, autonomous_enabled. Existing camera/map/control/log panels untouched — visible below. Responsive: stacks on screens ≤ 700px. |
 | #5 | Notifications cleanup + QR + validation + connectivity hint | **DONE** | (this commit) | Heading "Sicherheitsbenachrichtigung" → **"Handy-Alarm"**. Topic + rotate hidden behind `<details>⚙ Erweitert</details>` so non-technical users never see "ntfy"/"topic". QR rendered via api.qrserver.com (graceful fallback if service blocked — URL+copy always works). Client AND server validation: saving with one of `quiet_hours_{from,to}` set requires the other (the exact bug from 2026-05-23). Test endpoint now honors quiet hours: returns `suppressed_reason="quiet_hours"` if in window; UI prompts "trotzdem senden?" → re-POST with `?force=true`. New fields `last_test_at`/`success`/`error`/`forced` persisted in settings.yaml; UI renders connectivity hint banner ("✅ Letzter Test 23.05. 17:56 erfolgreich"). |
 | #4 | Settings basic/advanced split | **DONE** | (this commit) | Two tab buttons at top of `.container`: **Grundeinstellungen** (default) + **⚙ Erweitert**. Each existing panel tagged with `data-settings-tab="basic"` or `"advanced"`; CSS hides the off-tab panels via `.settings-grid.tab-basic [data-settings-tab="advanced"] {display:none}`. NO HTML reordering, NO logic change. Basic shows: Ladestation (renamed from "Ladestation & Home-Position"), Akku, Handy-Alarm, Datenschutz (new info card). Advanced shows: Erweiterte Einstellungen, E-Mail, Einstellungen zurücksetzen. Active tab persisted in localStorage. |
-| #7 | Event thumbnails grid | **DONE** | (this commit) | New `GET /api/events/{id}/frame` endpoint serves `frame.jpg`. `events.js` row-builder rewritten to emit cards: 16:9 thumbnail + emoji-prefixed plain-German label (🚶 Person / 🔥 Feuer / 🔔 Ankunft) + time. `events.css` overrides `.event-list` to be a `repeat(auto-fill, minmax(260px, 1fr))` grid. Falls back to "Kein Vorschaubild" when frame.jpg missing (legacy events). All existing handlers (select, edit-mode, bulk-delete, video playback in detail panel) preserved. |
-| #9 | First-launch wizard | TODO | — | new component on `index.html` |
+| #7 | Event thumbnails grid | **DONE** | `829d51d` | New `GET /api/events/{id}/frame` endpoint serves `frame.jpg`. `events.js` row-builder rewritten to emit cards: 16:9 thumbnail + emoji-prefixed plain-German label (🚶 Person / 🔥 Feuer / 🔔 Ankunft) + time. `events.css` overrides `.event-list` to be a `repeat(auto-fill, minmax(260px, 1fr))` grid. Falls back to "Kein Vorschaubild" when frame.jpg missing (legacy events). All existing handlers (select, edit-mode, bulk-delete, video playback in detail panel) preserved. |
+| #9 | First-launch wizard | **DEFERRED** | — | Operator on-site at hand-off day 1 (PLAN §4) → walks customer through setup verbally; full modal wizard not needed for this customer. Full spec preserved in §7 #9 for a future hand-off without on-site support. |
+| #23 | Final test + dry-run + cleanup | **DONE** | (this commit) | All 5 pages (`/`, `/control`, `/scheduler`, `/events`, `/settings`) return 200. All sprint features (status dot, main-status card, settings tabs, event thumbnails, Handy-Alarm cleanup) present in served CSS/JS. `web_app` Docker image rebuilt; `docker-compose.override.yaml` static bind-mount reverted; `web_app` recreated from canonical image. No `*.bak` left over (gitignored anyway). PAT not in `.git/config`. |
 
 ## 7. Per-item technical spec
 

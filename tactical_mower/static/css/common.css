@@ -75,6 +75,74 @@ textarea {
     display: none;
 }
 
+/* ─── UI sprint #2: single summary status dot ─────────────────────────
+ * Hides the 4 detailed nav badges by default. They reappear only when
+ * the operator clicks the summary dot (handled by common.js — adds
+ * .show-detail to .nav-status-group). See PLAN §7 item #2.
+ *
+ * Per-page JS keeps writing colors to the (hidden) old badges — harmless.
+ */
+.nav-status-group .status-badge {
+    display: none;
+}
+.nav-status-group.show-detail .status-badge {
+    display: inline-flex;
+}
+
+.nav-summary-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-primary);
+    color: var(--text-heading);
+    border: 2px solid var(--border-light);
+    border-radius: 999px;
+    padding: 8px 16px 8px 12px;
+    min-height: var(--btn-min-height);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.nav-summary-dot:hover {
+    border-color: var(--brand-blue);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+.nav-summary-dot .summary-dot-light {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #9aa1ab;       /* fallback grey when state unknown */
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.05) inset;
+}
+.nav-summary-dot.green .summary-dot-light { background: #2ea043; }   /* WCAG-AA green */
+.nav-summary-dot.orange .summary-dot-light { background: #f0883e; }  /* warm amber */
+.nav-summary-dot.red .summary-dot-light { background: #cf222e; }     /* attention red */
+
+.nav-summary-dot.green { border-color: #2ea043; }
+.nav-summary-dot.orange { border-color: #f0883e; }
+.nav-summary-dot.red {
+    border-color: #cf222e;
+    /* pulse to draw attention when something's wrong */
+    animation: nav-summary-pulse 2s ease-in-out infinite;
+}
+@keyframes nav-summary-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(207, 34, 46, 0.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(207, 34, 46, 0);   }
+}
+
+/* Popover containing the 4 old badges when operator clicks the dot.
+ * On wider screens, lay them out as a row right after the dot.
+ * On narrow tablets/phones, wrap onto a new line. */
+.nav-status-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 /* Navbar Styles */
 .navbar {
     background: var(--bg-primary);

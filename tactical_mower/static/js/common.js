@@ -188,6 +188,84 @@ class StatusManager {
         this.setBadgeColor('badge-gnss1', gnss1Color);
         this.setBadgeColor('badge-gnss2', gnss2Color);
         this.setBadgeColor('badge-fusion', fusionColor);
+
+        // UI sprint #2 — also drive the single summary dot.
+        // The 4 old badges are now hidden by default (CSS) and only shown
+        // when the operator taps the summary dot to see the detail popover.
+        this.updateSummaryStatus({ imu, gnss1, gnss2, fusion });
+    }
+
+    /* ─── UI sprint #2: single summary status dot ─────────────────────
+     * Replaces the 4 cryptic nav badges (GNSS1/GNSS2/IMU/Fusion) with
+     * one big colored indicator + plain German label. Tap → popover
+     * shows the old 4 badges (for technicians / debug).
+     * See PLAN_UI_CUSTOMER_HANDOFF.md §7 item #2.
+     */
+    installSummaryDot() {
+        const group = document.querySelector('.nav-status-group');
+        if (!group || document.getElementById('summary-status-dot')) return;
+
+        const dot = document.createElement('button');
+        dot.id = 'summary-status-dot';
+        dot.type = 'button';
+        dot.className = 'nav-summary-dot red';
+        dot.setAttribute('aria-label', 'Robotersystem-Status anzeigen');
+        dot.setAttribute('aria-expanded', 'false');
+        dot.innerHTML = `
+            <span class="summary-dot-light" aria-hidden="true"></span>
+            <span class="summary-dot-label">Status wird geladen…</span>
+        `;
+        // Insert the dot as the FIRST child so it leads the nav-status-group.
+        // Old badges live behind it and are revealed only via .show-detail.
+        group.insertBefore(dot, group.firstChild);
+
+        dot.addEventListener('click', () => {
+            const expanded = group.classList.toggle('show-detail');
+            dot.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+
+        // Click outside the group closes the popover
+        document.addEventListener('click', (e) => {
+            if (!group.contains(e.target) && group.classList.contains('show-detail')) {
+                group.classList.remove('show-detail');
+                dot.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    updateSummaryStatus({ imu, gnss1, gnss2, fusion }) {
+        const dot = document.getElementById('summary-status-dot');
+        if (!dot) return;
+
+        // Compute single state — see DESIGN PLAN §7 item #2 for the rules.
+        // 🟢 Alles bereit: both GNSS at RTK_FIXED (8) AND fusion globally initialised (2)
+        // 🟡 GPS schwach: both GNSS at least RTK_FLOAT (5) (or 1 = SPP — accept as caveat)
+        //                 OR fusion only locally initialised (1)
+        // 🔴 GPS verloren: anything worse
+        const gnssOK = (g) => g === 8;
+        const gnssWeak = (g) => g === 8 || g === 5 || g === 1;
+
+        let color = 'red';
+        let label = 'GPS verloren — Roboter steht still';
+
+        if (gnssOK(gnss1) && gnssOK(gnss2) && fusion === 2) {
+            color = 'green';
+            label = 'Alles bereit';
+        } else if (gnssWeak(gnss1) && gnssWeak(gnss2) && (fusion === 1 || fusion === 2)) {
+            color = 'orange';
+            label = 'GPS gerade schwach';
+        }
+
+        // IMU red is a hardware/sensor problem — override to red regardless
+        if (imu !== undefined && imu < 1 && !Number.isNaN(imu)) {
+            color = 'red';
+            label = 'Sensor-Problem (IMU)';
+        }
+
+        dot.classList.remove('red', 'orange', 'green');
+        dot.classList.add(color);
+        const labelEl = dot.querySelector('.summary-dot-label');
+        if (labelEl) labelEl.textContent = label;
     }
 
     setBadgeColor(id, color) {
@@ -268,9 +346,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Version Checker starten (prüft auf neue App-Versionen)
     window.versionChecker = new VersionChecker();
     window.versionChecker.start();
-    
+
     // Status Manager starten
     window.statusManager = new StatusManager();
+
+    // UI sprint #2 — inject the summary status dot into every page's nav.
+    // Safe to call on pages without .nav-status-group (no-op).
+    window.statusManager.installSummaryDot();
 });
 
 // Cleanup beim Verlassen der Seite

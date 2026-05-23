@@ -299,9 +299,12 @@ textarea {
     box-shadow: 0 -2px 6px rgba(0,0,0,0.04);
 }
 
-/* Toggle panel visibility based on the active tab */
-.settings-grid.tab-basic [data-settings-tab="advanced"] { display: none; }
-.settings-grid.tab-advanced [data-settings-tab="basic"] { display: none; }
+/* Toggle panel visibility based on the active tab.
+ * NOTE: panels are NOT all children of .settings-grid (the grid closes
+ * after panel 2; the rest are siblings). So we put the active-tab class
+ * on <body> and use a body-rooted selector instead. */
+body.settings-tab-basic    [data-settings-tab="advanced"] { display: none; }
+body.settings-tab-advanced [data-settings-tab="basic"]    { display: none; }
 
 /* Navbar Styles */
 .navbar {

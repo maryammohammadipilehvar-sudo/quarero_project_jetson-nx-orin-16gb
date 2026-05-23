@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '%s\\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Before doing anything else this session, use the Read tool on /home/quarero02/gits/CODEBASE_MENTAL_MODEL.md to load the project mental model and operating context for this codebase. Then continue with the user request.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

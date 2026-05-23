@@ -194,50 +194,68 @@
             </div>
         </div>
 
+        <!-- Control panel — two clear sections instead of mixed-purpose grid:
+             1. Routen verwalten (admin: select/new/edit/delete)
+             2. Robotersteuerung (peripherals + autonomy toggle)
+             Note: "Route jetzt starten" + "Roboter anhalten" already live in
+             the main-status-panel at the top of the page; not duplicated here.
+             Icons are inside .btn-icon spans OUTSIDE the toggleable text spans
+             so the JS that writes textContent='Licht Ein/Aus' doesn't wipe them. -->
         <div class="panel" id="control-panel">
-            <h2>Steuerung</h2>
-            
-            <div class="control-grid">
-                <div class="control-left">
-                    <h3 class="section-title">Route</h3>
-                    
-                    <div class="route-selector">
-                        <label style="margin-bottom: 5px; display: block;">Aktive Route</label>
-                        <select id="route-select" onchange="loadSelectedRoute()">
-                            <option value="">— keine —</option>
-                        </select>
-                    </div>
-
-                    <div class="button-group">
-                        <button class="btn-edit" onclick="openRouteEditor('new')">Neue Route</button>
-                        <button class="btn-edit" onclick="openRouteEditor('edit')">Route bearbeiten</button>
-                        <button class="btn-delete" onclick="deleteCurrentRoute()">Route löschen</button>
-                        <button class="btn-edit" onclick="startSelectedRouteNow()">Route jetzt starten</button>
-                    </div>
+            <div class="control-section">
+                <div class="control-section-header">
+                    <h3 class="section-title">Routen verwalten</h3>
+                    <span class="section-hint">Routen erstellen, bearbeiten oder löschen</span>
                 </div>
-
-        <div class="control-right">
-            <h3 class="section-title">Befehle</h3>
-            
-            <div class="control-buttons">
-                <button id="autonomous-btn" class="btn-stop btn-large" onclick="stopAutonomous()">
-                    <span class="btn-text">Autonom: Aus</span>
-                </button>
-                
-                <button class="btn-start btn-large" onclick="goToCharge()">
-                    <span class="btn-text">Rückkehr zur Ladestation</span>
-                </button>
-                
-                <button id="light-btn" class="btn-light-off btn-large" onclick="toggleLight()">
-                    <span class="btn-text" id="light-text">Licht Aus</span>
-                </button>
-                
-                <button id="charging-btn" class="btn-charging-off btn-large" onclick="toggleCharging()">
-                    <span class="btn-text" id="charging-text">Laden Aus</span>
-                </button>
+                <div class="route-selector">
+                    <label for="route-select">Aktive Route</label>
+                    <select id="route-select" onchange="loadSelectedRoute()">
+                        <option value="">— keine —</option>
+                    </select>
+                </div>
+                <div class="control-action-grid">
+                    <button class="btn-control-edit" type="button" onclick="openRouteEditor('new')">
+                        <span class="btn-icon" aria-hidden="true">➕</span>
+                        <span class="btn-text">Neue Route</span>
+                    </button>
+                    <button class="btn-control-edit" type="button" onclick="openRouteEditor('edit')">
+                        <span class="btn-icon" aria-hidden="true">✏</span>
+                        <span class="btn-text">Route bearbeiten</span>
+                    </button>
+                    <button class="btn-control-danger" type="button" onclick="deleteCurrentRoute()">
+                        <span class="btn-icon" aria-hidden="true">🗑</span>
+                        <span class="btn-text">Route löschen</span>
+                    </button>
+                </div>
             </div>
-        </div>
-                    </div>
+
+            <div class="control-section">
+                <div class="control-section-header">
+                    <h3 class="section-title">Robotersteuerung</h3>
+                    <span class="section-hint">Direkte Befehle an den Roboter</span>
+                </div>
+                <div class="control-action-grid control-cmd-grid">
+                    <button id="autonomous-btn" class="btn-stop btn-large" type="button" onclick="stopAutonomous()">
+                        <span class="btn-icon" aria-hidden="true">🛡</span>
+                        <span class="btn-text">Autonom: Aus</span>
+                    </button>
+
+                    <button class="btn-start btn-large" type="button" onclick="goToCharge()">
+                        <span class="btn-icon" aria-hidden="true">🔌</span>
+                        <span class="btn-text">Zur Ladestation fahren</span>
+                    </button>
+
+                    <button id="light-btn" class="btn-light-off btn-large" type="button" onclick="toggleLight()">
+                        <span class="btn-icon" aria-hidden="true">💡</span>
+                        <span class="btn-text" id="light-text">Licht Aus</span>
+                    </button>
+
+                    <button id="charging-btn" class="btn-charging-off btn-large" type="button" onclick="toggleCharging()">
+                        <span class="btn-icon" aria-hidden="true">⚡</span>
+                        <span class="btn-text" id="charging-text">Laden Aus</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Activity log panel — Status sub-panel removed (duplicated the

@@ -993,3 +993,87 @@ input[type="range"]::-moz-range-thumb {
     background: var(--brand-blue);
     border-radius: 2px;
 }
+
+/* ─── Dashboard control panel polish (operator request) ───────────────
+ * Two clear sections (Routen verwalten + Robotersteuerung) instead of
+ * the original left/right grid of mixed-purpose buttons. Icons added
+ * inside .btn-icon spans OUTSIDE the toggleable .btn-text spans so the
+ * JS that writes textContent='Licht Ein/Aus' doesn't wipe them. */
+#control-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+.control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.control-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-light);
+}
+.control-section-header h3 {
+    margin: 0;
+    color: var(--text-heading);
+}
+.section-hint {
+    color: var(--text-primary);
+    opacity: 0.65;
+    font-size: 0.9rem;
+}
+
+.control-action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+.control-cmd-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* Control buttons (the action grid) — pill style + icon prefix. */
+.control-action-grid > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    min-height: var(--btn-min-height);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+}
+.control-action-grid > button:hover { transform: translateY(-1px); }
+.control-action-grid .btn-icon { font-size: 1.2rem; line-height: 1; }
+
+.btn-control-edit {
+    background: var(--bg-alt);
+    color: var(--text-primary);
+}
+.btn-control-edit:hover {
+    background: var(--accent-blue);
+    border-color: var(--brand-blue);
+}
+.btn-control-danger {
+    background: #fef6f7;
+    color: #cf222e;
+}
+.btn-control-danger:hover {
+    background: #fce4e6;
+    border-color: #cf222e;
+}
+
+/* Better-looking route-selector label + select */
+#control-panel .route-selector { display: flex; flex-direction: column; gap: 6px; }
+#control-panel .route-selector label {
+    font-weight: 600;
+    color: var(--text-primary);
+}

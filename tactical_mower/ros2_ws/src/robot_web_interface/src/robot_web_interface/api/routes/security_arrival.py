@@ -344,14 +344,33 @@ async def _capture_clip_background(event_id: str, ts_dt: datetime, pre_s: float,
 
 
 @router.post("/notifications/test")
-async def test_notification():
-    """Fire one test notification using current settings topic. No event recorded."""
+async def test_notification(force: bool = False):
+    """Fire one test notification using current settings topic. No event recorded.
+
+    UI sprint #5: now honors quiet hours by default — if the operator's set a
+    quiet window and current time falls inside it, returns sent=False with
+    suppressed_reason='quiet_hours'. Operator can override by passing
+    ?force=true (UI shows a "Trotzdem senden?" prompt in that case).
+    """
     settings = get_settings()
     arrival_cfg = (settings.get("security_arrival") or {})
     notif_cfg = arrival_cfg.get("notifications") or {}
     topic = (notif_cfg.get("topic") or "").strip()
     if not topic:
         raise HTTPException(status_code=400, detail="topic not set; rotate first")
+
+    quiet_from = (notif_cfg.get("quiet_hours_from") or "").strip()
+    quiet_to = (notif_cfg.get("quiet_hours_to") or "").strip()
+    in_quiet = _is_in_quiet_hours(quiet_from, quiet_to)
+    if in_quiet and not force:
+        return {
+            "sent": False,
+            "suppressed_reason": "quiet_hours",
+            "quiet_window": f"{quiet_from}-{quiet_to}",
+            "topic": topic,
+            "hint": "Sende mit ?force=true um trotzdem zu testen.",
+        }
+
     alert = ArrivalAlert(
         event_id="test_notification",
         class_label="test",
@@ -362,12 +381,28 @@ async def test_notification():
         clip_path=None,
     )
     result = _notif_provider.send(alert, topic)
+
+    # Persist the test outcome so the UI's connectivity hint can read it.
+    # Uses the settings-yaml helpers from settings.py via a late import (avoid
+    # circular import at module load time).
+    try:
+        from .settings import _write_notif_block
+        _write_notif_block({
+            "last_test_at": datetime.now(timezone.utc).isoformat(),
+            "last_test_success": bool(result.sent),
+            "last_test_error": result.error or "",
+            "last_test_forced": bool(force and in_quiet),
+        })
+    except Exception as e:
+        log.warning("could not persist last_test_* state: %s", e)
+
     return {
         "sent": result.sent,
         "provider": result.provider,
         "reference": result.reference,
         "error": result.error,
         "topic": topic,
+        "forced": bool(force and in_quiet),
     }
 
 

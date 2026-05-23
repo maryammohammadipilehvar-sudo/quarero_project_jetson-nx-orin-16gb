@@ -298,46 +298,61 @@
             </div>
         </div>
 
-        <!-- Sicherheitsbenachrichtigung (Ankunft → ntfy Push) -->
+        <!-- UI sprint #5: "Handy-Alarm" — simplified for non-technical users.
+             Old panel was titled "Sicherheitsbenachrichtigung (Ankunft → ntfy Push)"
+             with "ntfy Topic" jargon visible. Now the operator just sees:
+             enable toggle, QR + URL, quiet hours, test button. Topic + rotate
+             live under "Erweitert" so the operator never sees the word "ntfy"
+             or "topic" unless they ask for it. See PLAN §7 item #5. -->
         <div class="panel">
-            <h2>Sicherheitsbenachrichtigung (Ankunft)</h2>
+            <h2>Handy-Alarm</h2>
             <div class="info-box">
-                Wenn die Kamera eine Person oder ein Fahrzeug erkennt, wird eine Push-Benachrichtigung
-                an Ihr Handy gesendet. Erforderlich: die kostenlose <strong>ntfy</strong>-App
-                (Play Store, App Store, F-Droid). Kein Konto, keine Anmeldung.
+                Bei Person/Fahrzeug-Erkennung klingelt Ihr Handy.
+                Benötigt: die kostenlose <strong>ntfy</strong>-App
+                (Play Store / App Store / F-Droid). Kein Konto, keine Anmeldung.
             </div>
+
+            <!-- Connectivity hint: shows when phone last got a test push.
+                 Updates after each Jetzt-testen click via /api/security/notifications/test. -->
+            <div id="notif-status-line" class="form-group" style="display: none; padding: 12px 14px; border-radius: 6px; font-weight: 500;"></div>
 
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="notif-enabled">
-                    Benachrichtigungen aktiviert
+                    Handy-Alarm aktiviert
                 </label>
-                <p class="form-hint">Aktiviert die Push-Benachrichtigung. Falls noch kein Topic vorhanden ist, wird automatisch eines erzeugt.</p>
+                <p class="form-hint">Aktiviert die Benachrichtigung an Ihr Handy. Beim ersten Aktivieren wird automatisch ein eigenes Abonnement erzeugt.</p>
             </div>
 
-            <div class="form-group">
-                <label>ntfy Topic</label>
-                <p class="form-hint">Geheime Adresse Ihres Telefons. Wer dieses Topic kennt, kann mitlesen — bei Verdacht „Topic rotieren“.</p>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <code id="notif-topic" style="flex: 1; background: #f4f4f4; padding: 8px; border-radius: 4px; font-family: monospace; word-break: break-all;">noch nicht gesetzt</code>
-                    <button class="btn-secondary" type="button" onclick="rotateNotifTopic()">Topic rotieren</button>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Abonnement-URL (auf dem Handy öffnen oder in ntfy „Topic abonnieren“ einfügen)</label>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <code id="notif-subscribe-url" style="flex: 1; background: #f4f4f4; padding: 8px; border-radius: 4px; font-family: monospace; word-break: break-all;">—</code>
-                    <button class="btn-secondary" type="button" onclick="copyNotifUrl()">Kopieren</button>
-                </div>
-                <p class="form-hint" style="margin-top: 8px;">
-                    <strong>Onboarding:</strong> 1) ntfy-App installieren · 2) „+“ tippen · 3) URL einfügen oder Topic-Namen eingeben · 4) auf „Test-Benachrichtigung“ klicken — das Handy sollte vibrieren.
+            <div class="form-group" id="notif-onboarding">
+                <label>Auf dem Handy abonnieren</label>
+                <p class="form-hint">
+                    1) ntfy-App installieren · 2) „+“ tippen · 3) QR scannen oder URL einfügen · 4) unten auf „Jetzt testen“ klicken — das Handy muss klingeln.
                 </p>
+                <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-top: 10px;">
+                    <!-- QR image: external service (api.qrserver.com) — same network the
+                         operator's phone uses to reach ntfy.sh, so internet is already there.
+                         onerror falls back to "QR nicht verfügbar — bitte URL kopieren". -->
+                    <div style="text-align: center;">
+                        <img id="notif-qr" alt="QR-Code für ntfy-Abonnement"
+                             style="display: none; width: 200px; height: 200px; border: 1px solid var(--border-light); border-radius: 8px; background: white;" />
+                        <div id="notif-qr-fallback" style="display: none; width: 200px; height: 200px; border: 2px dashed var(--border-light); border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 10px; text-align: center; color: var(--text-primary); opacity: 0.7;">
+                            QR-Code nicht verfügbar.<br>Bitte URL unten kopieren.
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 240px;">
+                        <div style="font-size: 0.9rem; color: var(--text-primary); opacity: 0.75; margin-bottom: 6px;">Abonnement-URL:</div>
+                        <div style="display: flex; gap: 8px; align-items: stretch;">
+                            <code id="notif-subscribe-url" style="flex: 1; background: #f4f4f4; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 0.95rem; word-break: break-all;">—</code>
+                            <button class="btn-secondary" type="button" onclick="copyNotifUrl()" style="white-space: nowrap;">Kopieren</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="form-group">
-                <label>Ruhezeit (keine Anrufe in diesem Fenster — Ereignis wird trotzdem aufgezeichnet)</label>
-                <p class="form-hint">Beide leer lassen für „kein Ruhefenster“. Bei aktiver Ruhezeit wird stattdessen die SMTP-Fallback-Mail gesendet.</p>
+                <label>Ruhezeit — kein Klingeln in diesem Fenster</label>
+                <p class="form-hint">Aufzeichnung läuft trotzdem. Beide Felder leer = kein Ruhefenster (klingelt 24/7). <strong>Beide Felder müssen gemeinsam ausgefüllt werden.</strong></p>
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
                     <div>
                         <span>Ruhezeit von</span>
@@ -351,12 +366,29 @@
             </div>
 
             <div class="button-group">
-                <button class="btn-secondary" type="button" onclick="testNotif()">Test-Benachrichtigung senden</button>
+                <button class="btn-secondary" type="button" onclick="testNotif()">📞 Jetzt testen — Handy klingelt</button>
                 <button class="btn-save" type="button" onclick="saveNotifSettings()">Speichern</button>
             </div>
 
             <div id="notif-success" class="success-message"></div>
             <div id="notif-error" class="success-message" style="background:#fdd; color:#900;"></div>
+
+            <!-- Advanced / technician details, hidden by default.
+                 Holds the raw topic and the "Topic rotieren" button. Non-technical
+                 users never see "ntfy" or "topic". -->
+            <details style="margin-top: 18px;">
+                <summary style="cursor: pointer; padding: 8px 0; font-weight: 600; color: var(--text-primary);">⚙ Erweitert (für Technik)</summary>
+                <div style="padding: 12px 0;">
+                    <div class="form-group">
+                        <label>Topic (Abonnement-Adresse)</label>
+                        <p class="form-hint">Geheime Adresse Ihres Handy-Abonnements. Wer diesen Wert kennt, kann Benachrichtigungen an Ihr Handy senden. Bei Verdacht auf Leak: „Topic rotieren“ — danach muss die ntfy-App neu abonnieren.</p>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <code id="notif-topic" style="flex: 1; background: #f4f4f4; padding: 8px; border-radius: 4px; font-family: monospace; word-break: break-all;">noch nicht gesetzt</code>
+                            <button class="btn-secondary" type="button" onclick="rotateNotifTopic()">Topic rotieren</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
         </div>
 
         <!-- Restore Settings Panel -->
@@ -487,9 +519,11 @@
 <!-- Gemeinsame Scripts -->
 <script src="/static/js/common.js"></script>
 
-<!-- Sicherheitsbenachrichtigung (Ankunft) — self-contained JS for the new panel only.
-     Kept inline to avoid touching the existing settings.js until we're sure the API is stable.
-     See DESIGN_ARRIVAL_PIPELINE.md §5.7. -->
+<!-- UI sprint #5: Handy-Alarm self-contained JS.
+     QR rendering via api.qrserver.com (operator's tablet already has internet
+     because ntfy.sh wouldn't work otherwise). Graceful fallback if QR service down.
+     Client-side validation: both quiet-hour fields required if either is set.
+     Connectivity hint: shows last_test_at + success/failure read from server. -->
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
@@ -498,7 +532,7 @@
         el.textContent = text;
         el.style.display = "block";
         $("notif-error").style.display = "none";
-        setTimeout(() => { el.style.display = "none"; }, 5000);
+        setTimeout(() => { el.style.display = "none"; }, 7000);
     };
     const showErr = (text) => {
         const el = $("notif-error");
@@ -507,12 +541,78 @@
         $("notif-success").style.display = "none";
     };
 
+    // Render the connectivity-hint banner at the top of the panel from the
+    // server-persisted last_test_at + last_test_success.
+    function renderStatusLine(data) {
+        const line = $("notif-status-line");
+        if (!data.enabled) {
+            line.style.display = "none";
+            return;
+        }
+        const ts = data.last_test_at || "";
+        const ok = data.last_test_success;
+        line.style.display = "block";
+        if (!ts) {
+            line.textContent = "📵 Noch nie getestet. Bitte unten „Jetzt testen“ klicken.";
+            line.style.background = "#fff7e6";
+            line.style.color = "#854d0e";
+            return;
+        }
+        // Format the ISO timestamp in operator's local timezone, German format.
+        let display = ts;
+        try {
+            const d = new Date(ts);
+            display = d.toLocaleString("de-DE", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit",
+            });
+        } catch (e) { /* keep raw ts */ }
+
+        if (ok) {
+            line.textContent = `✅ Letzter Test ${display} erfolgreich. Handy ist verbunden.`;
+            line.style.background = "#dcfce7";
+            line.style.color = "#14532d";
+        } else {
+            const err = data.last_test_error ? ` — Fehler: ${data.last_test_error}` : "";
+            line.textContent = `❌ Letzter Test ${display} fehlgeschlagen${err}`;
+            line.style.background = "#fee2e2";
+            line.style.color = "#7f1d1d";
+        }
+    }
+
+    // QR via api.qrserver.com. Falls back to a dashed-border message if the
+    // service is down or the operator's network blocks it.
+    function renderQR(subscribeUrl) {
+        const img = $("notif-qr");
+        const fallback = $("notif-qr-fallback");
+        if (!subscribeUrl || subscribeUrl === "—") {
+            img.style.display = "none";
+            fallback.style.display = "none";
+            return;
+        }
+        img.onload = () => {
+            img.style.display = "block";
+            fallback.style.display = "none";
+        };
+        img.onerror = () => {
+            img.style.display = "none";
+            fallback.style.display = "flex";
+        };
+        img.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data="
+                  + encodeURIComponent(subscribeUrl);
+    }
+
     function renderState(data) {
         $("notif-enabled").checked = !!data.enabled;
         $("notif-topic").textContent = data.topic || "noch nicht gesetzt";
         $("notif-subscribe-url").textContent = data.subscribe_url || "—";
         $("notif-quiet-from").value = data.quiet_hours_from || "";
         $("notif-quiet-to").value = data.quiet_hours_to || "";
+        // Hide the onboarding block entirely if notifications are disabled
+        // — no point showing a QR if it does nothing.
+        $("notif-onboarding").style.display = data.enabled ? "block" : "none";
+        renderQR(data.subscribe_url);
+        renderStatusLine(data);
     }
 
     async function loadNotifSettings() {
@@ -526,7 +626,19 @@
         }
     }
 
+    // Client-side guard: prevents the operator from saving a half-set quiet
+    // window (the exact bug that bit on 2026-05-23). Server enforces the
+    // same rule for defense in depth.
+    function quietHoursPairValid() {
+        const f = ($("notif-quiet-from").value || "").trim();
+        const t = ($("notif-quiet-to").value || "").trim();
+        if (!!f === !!t) return true;  // both set or both empty → OK
+        showErr('Ruhezeit: bitte beide Felder ausfüllen oder beide leer lassen.');
+        return false;
+    }
+
     window.saveNotifSettings = async function () {
+        if (!quietHoursPairValid()) return;
         try {
             const r = await fetch("/api/settings/notifications", {
                 method: "POST",
@@ -547,26 +659,41 @@
     };
 
     window.rotateNotifTopic = async function () {
-        if (!confirm("Topic rotieren? Das alte Topic empfängt danach keine Nachrichten mehr — Sie müssen die ntfy-App neu abonnieren.")) return;
+        if (!confirm("Topic rotieren? Das alte Topic empfängt danach keine Nachrichten mehr — Sie müssen die ntfy-App neu abonnieren (QR neu scannen).")) return;
         try {
             const r = await fetch("/api/settings/notifications/rotate-topic", { method: "POST" });
             const data = await r.json();
             if (data.status !== "success") { showErr("Rotieren fehlgeschlagen: " + (data.message || "")); return; }
             renderState(data);
-            showOk("Neues Topic erzeugt. ntfy-App neu abonnieren.");
+            showOk("Neues Topic erzeugt. Bitte ntfy-App neu abonnieren (QR neu scannen).");
         } catch (e) {
             showErr("Rotieren fehlgeschlagen: " + e);
         }
     };
 
-    window.testNotif = async function () {
+    // Test handler with quiet-hours-aware UX:
+    //  - Server returns sent=False, suppressed_reason="quiet_hours" when in window
+    //  - We prompt operator: "in Ruhezeit — trotzdem senden?" → re-POST with ?force=true
+    window.testNotif = async function (forceOverride) {
+        const force = forceOverride === true;
         try {
-            const r = await fetch("/api/security/notifications/test", { method: "POST" });
+            const url = "/api/security/notifications/test" + (force ? "?force=true" : "");
+            const r = await fetch(url, { method: "POST" });
             const data = await r.json();
             if (data.sent) {
-                showOk(`Test gesendet via ${data.provider} (ref=${data.reference || "—"}). Handy sollte vibrieren.`);
+                const note = data.forced ? " (trotz Ruhezeit gesendet)" : "";
+                showOk(`Test gesendet via ${data.provider} (ref=${data.reference || "—"}). Handy sollte klingeln.${note}`);
+                // Re-load so the connectivity hint updates immediately.
+                setTimeout(loadNotifSettings, 600);
+            } else if (data.suppressed_reason === "quiet_hours") {
+                if (confirm(`Aktuell ist Ruhezeit (${data.quiet_window}). Während der Ruhezeit klingelt das Handy nicht. Trotzdem testen?`)) {
+                    return window.testNotif(true);
+                }
+                showOk(`Test unterdrückt — Ruhezeit ${data.quiet_window}. Bei einer echten Erkennung würde genauso nicht geklingelt.`);
+                setTimeout(loadNotifSettings, 600);
             } else {
                 showErr("Test fehlgeschlagen: " + (data.error || data.detail || JSON.stringify(data)));
+                setTimeout(loadNotifSettings, 600);
             }
         } catch (e) {
             showErr("Test fehlgeschlagen: " + e);
@@ -575,7 +702,10 @@
 
     window.copyNotifUrl = function () {
         const txt = $("notif-subscribe-url").textContent;
-        if (!txt || txt === "—") { showErr("Keine URL zum Kopieren — zuerst „Benachrichtigungen aktiviert“ einschalten."); return; }
+        if (!txt || txt === "—") {
+            showErr("Keine URL zum Kopieren — zuerst „Handy-Alarm aktiviert“ einschalten.");
+            return;
+        }
         navigator.clipboard.writeText(txt).then(
             () => showOk("URL kopiert."),
             (e) => showErr("Kopieren fehlgeschlagen: " + e)

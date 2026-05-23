@@ -205,6 +205,12 @@ def _read_notif_block() -> dict:
         "quiet_hours_to": notif.get("quiet_hours_to", "") or "",
         "provider": notif.get("provider", "ntfy"),
         "server": os.environ.get("NTFY_SERVER", "https://ntfy.sh"),
+        # UI sprint #5: connectivity hint fields. Updated by the
+        # /api/security/notifications/test handler. None on first install.
+        "last_test_at": notif.get("last_test_at") or "",
+        "last_test_success": notif.get("last_test_success"),  # None / True / False
+        "last_test_error": notif.get("last_test_error") or "",
+        "last_test_forced": bool(notif.get("last_test_forced", False)),
     }
 
 
@@ -245,12 +251,28 @@ async def get_notifications_settings():
 @router.post("/notifications")
 async def save_notifications_settings(payload: dict):
     """Update enabled / quiet hours. The topic is NEVER set via this endpoint —
-    use POST /notifications/rotate-topic to (re)generate one."""
+    use POST /notifications/rotate-topic to (re)generate one.
+
+    UI sprint #5 server-side validation: if one of quiet_hours_{from,to} is set,
+    BOTH must be set. Catches the half-set bug that bit operator on 2026-05-23.
+    """
     try:
         updates: dict = {}
 
         if "enabled" in payload:
             updates["enabled"] = bool(payload["enabled"])
+
+        # Pre-validate the quiet-hours pair together (must be both or neither).
+        # Read current values; the payload overrides only the fields it provides.
+        current = _read_notif_block()
+        eff_from = (payload.get("quiet_hours_from", current.get("quiet_hours_from", "")) or "").strip()
+        eff_to = (payload.get("quiet_hours_to", current.get("quiet_hours_to", "")) or "").strip()
+        if bool(eff_from) != bool(eff_to):
+            return {
+                "status": "error",
+                "message": "Ruhezeit: bitte beide Zeiten ausfüllen oder beide leer lassen.",
+                "field": "quiet_hours",
+            }
 
         for field in ("quiet_hours_from", "quiet_hours_to"):
             if field in payload:
@@ -262,7 +284,6 @@ async def save_notifications_settings(payload: dict):
         # If operator enables notifications but no topic exists, auto-generate one
         # (per design: "operator can't lock themselves out by checking the box first")
         if updates.get("enabled"):
-            current = _read_notif_block()
             if not current.get("topic"):
                 updates["topic"] = _generate_topic()
 

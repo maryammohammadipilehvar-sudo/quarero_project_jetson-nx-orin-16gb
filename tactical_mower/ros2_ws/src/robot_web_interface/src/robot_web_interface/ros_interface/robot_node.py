@@ -211,6 +211,14 @@ class RobotNode(Node):
             10
         )
         
+        # Waypoint save trigger (Circle button on PS5 or web button)
+        self.save_waypoint_sub = self.create_subscription(
+            Bool,
+            '/control/save_waypoint',
+            self._save_waypoint_callback,
+            10
+        )
+
         # Security alert subscriber
         self.security_alert_sub = self.create_subscription(
             SecurityAlert,
@@ -250,7 +258,8 @@ class RobotNode(Node):
         self.joy_web_pub = self.create_publisher(Joy, joy_web_topic, 10)
         self.set_speed_pub = self.create_publisher(Float32, set_speed_topic, 10)
         self.autonomous_operation_pub = self.create_publisher(Bool, autonomous_operation_topic, 10)
-        self.obstacle_avoidance_pub = self.create_publisher(Bool, '/control/obstacle_avoidance_enabled', 10)
+        latched_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.obstacle_avoidance_pub = self.create_publisher(Bool, '/control/obstacle_avoidance_enabled', latched_qos)
         self.speed_factor = 1.0
 
         # Schedule Publishers
@@ -330,6 +339,23 @@ class RobotNode(Node):
                     if not self.status_manager.robot_connected:
                         self.status_manager.robot_connected = True
                         self.subscribers._broadcast_connection_status(True)
+
+    def _save_waypoint_callback(self, msg: Bool) -> None:
+        pos = self.status_manager.current_position
+        lat = pos.get("latitude", 0.0)
+        lon = pos.get("longitude", 0.0)
+        if lat == 0.0 and lon == 0.0:
+            self.get_logger().warn("Waypoint save triggered but no GPS fix")
+            return
+        self.get_logger().info(f"Waypoint save: {lat:.7f}, {lon:.7f}")
+        if self.event_loop and self.connection_manager:
+            self.event_loop.call_soon_threadsafe(
+                self.event_loop.create_task,
+                self.connection_manager.broadcast({
+                    "type": "waypoint_saved",
+                    "data": {"latitude": lat, "longitude": lon}
+                })
+            )
 
     def robot_ack_callback(self, msg: Bool) -> None:
         with self.last_ack_lock:

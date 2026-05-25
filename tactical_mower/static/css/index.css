@@ -1,6 +1,6 @@
 html, body {
     height: 100%;
-    overflow: hidden;
+    overflow-y: auto;
 }
 
 body {
@@ -14,7 +14,7 @@ body {
             gap: 10px;
             padding: 10px;
             flex: 1;
-            overflow: hidden;
+            overflow-y: auto;
             min-height: 0;
         }
 
@@ -42,7 +42,6 @@ body {
         #camera-panel {
             display: flex;
             flex-direction: column;
-            
         }
 
         .camera-container {
@@ -235,6 +234,87 @@ body {
         .btn-charging-on {
             background: #4CAF50;
             color: white;
+        }
+
+        /* Route recording */
+        .btn-control-record {
+            background: #ef4444;
+            color: white;
+            border: none;
+        }
+        .btn-control-record:hover { background: #dc2626; }
+
+        .recording-panel {
+            background: #fef2f2;
+            border: 2px solid #ef4444;
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 10px;
+        }
+        .recording-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .recording-indicator {
+            font-weight: 700;
+            color: #dc2626;
+            animation: rec-blink 1.2s ease-in-out infinite;
+        }
+        @keyframes rec-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .recording-count {
+            font-weight: 600;
+            color: var(--brand-blue);
+            font-size: 1.1rem;
+        }
+        .recording-hint {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+        }
+        .btn-record-waypoint {
+            width: 100%;
+            padding: 16px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            background: var(--brand-blue);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 12px;
+            min-height: 64px;
+        }
+        .btn-record-waypoint:hover { background: #2563a8; }
+        .btn-record-waypoint:active { transform: translateY(1px); }
+        .recording-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-record-save {
+            flex: 1;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: #2ea043;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .btn-record-save:hover { background: #1c7a32; }
+        .btn-record-cancel {
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            background: var(--bg-alt);
+            color: var(--text-primary);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            cursor: pointer;
         }
 
         .btn-edit {
@@ -759,10 +839,109 @@ body {
         }
 
         /* TABLET (ab 768px) */
+        /* ── TABLET + MOBILE: expandable panel system ──────────────────────
+           Panels show as compact cards.  Tap the header → panel expands to
+           fill the viewport.  Tap ✕ → collapses back.  Only one expanded
+           at a time.  Professional "focus mode" pattern. */
+
+        /* Expand affordance on every panel header (tablet / mobile) */
+        .panel-expand-hint {
+            display: none;
+        }
+        @media (max-width: 1023px) {
+            .map-toolbar,
+            .camera-toolbar {
+                cursor: pointer;
+                border-radius: 6px;
+                padding: 6px 8px;
+                margin: -6px -8px 8px -8px;
+                transition: background 0.15s;
+            }
+            .map-toolbar:active,
+            .camera-toolbar:active {
+                background: var(--accent-blue);
+            }
+
+            .panel-expand-hint {
+                display: inline-flex;
+                align-items: center;
+                margin-left: auto;
+                font-size: 0.8rem;
+                color: var(--text-primary);
+                opacity: 0.5;
+                gap: 4px;
+                pointer-events: none;
+            }
+            .panel-expand-hint::before { content: "⛶"; font-size: 1.1rem; }
+
+            /* Compact card heights when NOT expanded */
+            #map-panel #map         { height: 35vh; min-height: 220px; }
+            #camera-panel           { max-height: 320px; }
+            #control-panel          { max-height: 280px; overflow-y: auto; }
+            #log-panel              { max-height: 220px; }
+
+            /* Expanded panel: fills screen below navbar */
+            .panel.panel-expanded {
+                position: fixed !important;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 2000;
+                margin: 0;
+                border-radius: 0;
+                max-height: none !important;
+                height: 100vh !important;
+                overflow-y: auto;
+                padding-top: 10px;
+            }
+            .panel.panel-expanded #map {
+                height: calc(100vh - 80px) !important;
+                min-height: 0 !important;
+            }
+            .panel.panel-expanded .camera-container {
+                height: calc(100vh - 140px) !important;
+                min-height: 0 !important;
+            }
+
+            /* Show close button only when expanded */
+            .panel-close-btn { display: none; }
+            .panel.panel-expanded .panel-close-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin-left: auto;
+                background: var(--bg-alt);
+                border: 1px solid var(--border-light);
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                cursor: pointer;
+                color: var(--text-primary);
+            }
+            .panel.panel-expanded .panel-close-btn:hover {
+                background: #f44336;
+                color: white;
+                border-color: #f44336;
+            }
+
+            /* Hide expand hint when expanded */
+            .panel.panel-expanded .panel-expand-hint { display: none; }
+        }
+
         @media (min-width: 768px) {
             .container {
                 grid-template-columns: repeat(2, 1fr);
                 overflow-y: auto;
+            }
+
+            #map-panel {
+                grid-column: 1 / -1;
+            }
+
+            #camera-panel {
+                grid-column: 1 / -1;
             }
 
             .button-group {
@@ -782,32 +961,63 @@ body {
             }
         }
 
-        /* DESKTOP (ab 1024px) - FIX für Editor-Modus mit Split-Layout */
+        /* DESKTOP (ab 1024px) — industry dashboard layout:
+           Top row:    Map (55%) + Camera (45%) — the visual panels
+           Bottom row: Controls (50%) + Log (50%) — compact interactive strip */
         @media (min-width: 1024px) {
-            .container {
-                grid-template-columns: repeat(2, 1fr);
-                grid-template-rows: 1fr 1fr;
+            html, body {
+                overflow: hidden;
             }
 
-            #camera-panel {
-                display: flex;
-                flex-direction: column;
-                overflow: visible;  /* NEU - statt hidden */
+            .container {
+                grid-template-columns: 55fr 45fr;
+                grid-template-rows: auto 1fr auto;
+                overflow: hidden;
+            }
+
+            #main-status-panel {
+                grid-column: 1 / -1;
             }
 
             #map-panel {
-                grid-column: 2;
-                grid-row: 1;
-            }
-
-            #control-panel {
                 grid-column: 1;
                 grid-row: 2;
             }
 
-            #log-panel {
+            #camera-panel {
                 grid-column: 2;
                 grid-row: 2;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                padding: 10px;
+            }
+
+            #control-panel {
+                grid-column: 1;
+                grid-row: 3;
+                overflow-y: auto;
+                max-height: 240px;
+            }
+
+            #log-panel {
+                grid-column: 2;
+                grid-row: 3;
+                overflow-y: auto;
+                max-height: 240px;
+            }
+
+            /* Camera: compact buttons, feed fills remaining space */
+            #camera-panel .camera-header { margin-bottom: 6px; }
+            #camera-panel .camera-tabs { margin-bottom: 4px; }
+            #camera-panel .camera-controls { margin-bottom: 4px; }
+            #camera-panel .camera-container { flex: 1; min-height: 0; }
+            #camera-panel h2 { margin-bottom: 0; font-size: 1em; }
+
+            /* Bottom row: subtle top-border to separate from visual area */
+            #control-panel,
+            #log-panel {
+                border-top: 2px solid var(--border-accent);
             }
 
             /* Editor-Modus: Split-Layout mit fester Sidebar */
@@ -851,8 +1061,8 @@ body {
         }
 
         @media (max-width: 767px) {
-            .container {
-                overflow-y: auto;
+            .map-legend {
+                display: none;
             }
 
             .navbar {

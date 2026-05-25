@@ -233,6 +233,8 @@
             } else if (data.type === 'autonomous_status') {
                 autonomousOperationEnabled = data.data;
                 updateStopButton();
+            } else if (data.type === 'waypoint_saved') {
+                onWaypointSaved(data.data);
             } else if (data.type === 'fusion_status') {
                 fusionRawState = data.data || fusionRawState;
                 updateFusionBadges(fusionRawState);
@@ -927,17 +929,14 @@
         let isCameraModalOpen = false;
 
         function openCameraModal() {
-            const container = document.getElementById('camera-container');
-            if (!container.classList.contains('has-frame')) return;
             const modal = document.getElementById('camera-modal');
             const modalTitle = document.getElementById('camera-modal-title');
-            // Move the actual live feed img into the modal — no copy, always live
             const feed = document.getElementById('camera-feed');
             document.getElementById('camera-modal-feed-wrapper').appendChild(feed);
             feed.style.maxWidth = '100vw';
             feed.style.maxHeight = 'calc(100vh - 48px)';
-            feed.style.width = 'auto';
-            feed.style.height = 'auto';
+            feed.style.width = '100%';
+            feed.style.height = '100%';
             feed.style.objectFit = 'contain';
             modalTitle.textContent = cameraNames[currentCameraStream] || 'Kamera';
             modal.classList.add('active');
@@ -946,7 +945,6 @@
 
         function closeCameraModal() {
             const modal = document.getElementById('camera-modal');
-            // Move feed back to its original container
             const feed = document.getElementById('camera-feed');
             const container = document.getElementById('camera-container');
             container.appendChild(feed);
@@ -959,6 +957,11 @@
             isCameraModalOpen = false;
         }
 
+        function openCameraStream(stream, btn) {
+            switchCamera(stream, btn);
+            openCameraModal();
+        }
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeCameraModal();
@@ -968,7 +971,23 @@
             }
         });
 
-        document.getElementById('camera-feed').addEventListener('click', openCameraModal);
+        function expandPanel(panelId, event) {
+            if (event && (event.target.closest('button') || event.target.closest('select'))) return;
+            if (window.innerWidth >= 1024) return;
+            const panel = document.getElementById(panelId);
+            if (panel.classList.contains('panel-expanded')) return;
+            document.querySelectorAll('.panel-expanded').forEach(p => p.classList.remove('panel-expanded'));
+            panel.classList.add('panel-expanded');
+            if (panelId === 'map-panel' && map) setTimeout(() => map.invalidateSize(), 50);
+        }
+
+        function collapsePanel() {
+            const expanded = document.querySelector('.panel-expanded');
+            if (expanded) {
+                expanded.classList.remove('panel-expanded');
+                if (map) setTimeout(() => map.invalidateSize(), 50);
+            }
+        }
 
         function toggleMapFullscreen() {
             const panel = document.getElementById('map-panel');
@@ -1247,6 +1266,80 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        // ── Route recording (PS5 Circle button or screen tap) ──────────
+        let isRecording = false;
+        let recordedWaypoints = [];
+        let recordingMarkers = [];
+
+        function startRecording() {
+            isRecording = true;
+            recordedWaypoints = [];
+            recordingMarkers.forEach(m => map.removeLayer(m));
+            recordingMarkers = [];
+            document.getElementById('recording-panel').style.display = 'block';
+            document.getElementById('recording-count').textContent = '0 Punkte';
+        }
+
+        function onWaypointSaved(wp) {
+            if (!isRecording) return;
+            recordedWaypoints.push(wp);
+            document.getElementById('recording-count').textContent = recordedWaypoints.length + (recordedWaypoints.length === 1 ? ' Punkt' : ' Punkte');
+            const marker = L.circleMarker([wp.latitude, wp.longitude], {
+                radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.7
+            }).addTo(map);
+            marker.bindTooltip(String(recordedWaypoints.length), {permanent: true, direction: 'center', className: 'wp-number-label'});
+            recordingMarkers.push(marker);
+            map.panTo([wp.latitude, wp.longitude]);
+        }
+
+        async function saveWaypointFromScreen() {
+            try {
+                const res = await fetch('/api/control/save_waypoint', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    onWaypointSaved(data.waypoint);
+                } else {
+                    alert(data.message || 'Fehler beim Speichern');
+                }
+            } catch (e) {
+                alert('Verbindungsfehler: ' + e.message);
+            }
+        }
+
+        async function stopRecording() {
+            if (recordedWaypoints.length < 2) {
+                alert('Mindestens 2 Punkte nötig!');
+                return;
+            }
+            const name = prompt('Name für die neue Route:');
+            if (!name || !name.trim()) return;
+            try {
+                const res = await fetch('/api/routes/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name.trim(), loop_mode: false, waypoints: recordedWaypoints })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    alert('✅ Route "' + name.trim() + '" gespeichert (' + recordedWaypoints.length + ' Punkte)');
+                    cancelRecording();
+                    loadRoutes();
+                } else {
+                    alert('❌ ' + (data.message || 'Fehler'));
+                }
+            } catch (e) {
+                alert('Fehler: ' + e.message);
+            }
+        }
+
+        function cancelRecording() {
+            isRecording = false;
+            recordedWaypoints = [];
+            recordingMarkers.forEach(m => map.removeLayer(m));
+            recordingMarkers = [];
+            document.getElementById('recording-panel').style.display = 'none';
+        }
+
         async function toggleLight() {
             // Wenn ein Kommando noch läuft → ignorieren
             if (lightPending) return;

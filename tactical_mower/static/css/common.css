@@ -653,69 +653,79 @@ input[type="range"]::-moz-range-thumb {
  *   - 16:9 aspect-ratio container so panel doesn't jump on resolution change
  *   - Loading overlay during the ~100-500ms WebSocket-switch gap
  * Builds on existing #camera-panel structure; no JS rewrite of switching. */
-.camera-header {
+/* ─── Camera panel ────────────────────────────────────────────────── */
+.camera-header,
+.camera-toolbar {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
+    align-items: center;
+    gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
 }
-.camera-header h2 { margin: 0; }
+.camera-header h2,
+.camera-toolbar h2 { margin: 0; }
 .camera-current-label {
     display: inline-block;
     background: var(--accent-blue);
     color: var(--brand-blue);
     padding: 4px 12px;
     border-radius: 999px;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
 }
 
+/* Camera selector — button grid, each opens fullscreen modal */
 .camera-controls {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 8px;
-    margin-bottom: 14px;
+    flex-shrink: 0;
 }
+.camera-controls .cam-section { display: contents; }
 .camera-controls .camera-btn {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 10px;
     background: var(--bg-alt);
     color: var(--text-primary);
     border: 2px solid transparent;
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: 12px 16px;
     font-size: 0.95rem;
     font-weight: 500;
     cursor: pointer;
-    min-height: var(--btn-min-height);
-    text-align: left;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    min-height: 56px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.camera-controls .camera-btn .cam-icon { font-size: 1.2rem; line-height: 1; }
+.camera-controls .camera-btn .cam-icon { font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
+.camera-controls .camera-btn .cam-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .camera-controls .camera-btn:hover {
     background: var(--accent-blue);
     border-color: var(--brand-blue);
+    box-shadow: 0 2px 8px rgba(47,116,199,0.12);
 }
 .camera-controls .camera-btn.active {
     background: var(--brand-blue);
     color: white;
     border-color: #1d4f8a;
 }
-.camera-controls .camera-btn.debug-only {
-    opacity: 0.7;
-    font-size: 0.85rem;
-}
 
+/* Feed container */
 .camera-container {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 9;
+    flex: 1;
+    min-height: 220px;
     background: #111;
     border-radius: 8px;
     overflow: hidden;
+    border: 1px solid var(--border-light);
 }
 .camera-container #camera-feed {
     width: 100%;
@@ -765,29 +775,27 @@ input[type="range"]::-moz-range-thumb {
    Live tab shows the 5 physical cameras; Debug shows LiDAR + 3D-Tiefe.
    Operator's preference persists in localStorage (camera_active_tab). */
 .camera-tabs {
-    display: flex;
+    display: inline-flex;
     gap: 4px;
-    margin-bottom: 10px;
+    margin-left: auto;
 }
 .cam-tab-btn {
-    background: transparent;
+    background: var(--bg-alt);
     color: var(--text-primary);
-    border: 2px solid transparent;
-    border-bottom-color: var(--border-light);
-    padding: 8px 16px;
-    font-size: 0.95rem;
+    border: 1px solid var(--border-light);
+    padding: 4px 10px;
+    font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
     min-height: 0;
-    border-radius: 6px 6px 0 0;
+    border-radius: 4px;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .cam-tab-btn:hover { background: var(--bg-alt); }
 .cam-tab-btn.active {
-    color: var(--brand-blue);
+    color: white;
+    background: var(--brand-blue);
     border-color: var(--brand-blue);
-    border-bottom-color: var(--bg-panel);
-    background: var(--bg-panel);
 }
 
 /* Show only the active tab's section; hide the other.
@@ -891,27 +899,14 @@ input[type="range"]::-moz-range-thumb {
  * Cleaner toolbar, dedicated map buttons, route-info pill, small legend.
  * JS bindings unchanged — onclick handlers (focusOnHome, toggleMapFullscreen,
  * #route-info/route-name-display/route-distance writes) still work. */
-.map-header {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-}
-.map-header h2 { margin: 0; }
-.map-position-hint {
-    color: var(--text-primary);
-    opacity: 0.65;
-    font-size: 0.95rem;
-}
-
 .map-toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
+.map-toolbar h2 { margin: 0; margin-right: 4px; }
 .map-toolbar .map-spacer { flex: 1 1 auto; }
 
 .btn-map-action {
@@ -962,20 +957,15 @@ input[type="range"]::-moz-range-thumb {
     opacity: 0.7;
 }
 
-/* Bump the map's minimum height so it never collapses to nothing when
-   the parent flex chain doesn't impose one. */
-#map { min-height: 360px; border: 1px solid var(--border-light); }
+#map { min-height: 300px; border: 1px solid var(--border-light); }
 
 .map-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border-light);
+    gap: 12px;
     color: var(--text-primary);
-    opacity: 0.75;
-    font-size: 0.9rem;
+    opacity: 0.6;
+    font-size: 0.85rem;
 }
 .map-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .map-legend-dot {

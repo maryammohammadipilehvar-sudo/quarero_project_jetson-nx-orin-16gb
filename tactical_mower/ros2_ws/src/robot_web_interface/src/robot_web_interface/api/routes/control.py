@@ -327,3 +327,16 @@ async def charge_manual(data: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+@router.post("/save_waypoint")
+async def save_waypoint():
+    """Save current GPS position as a waypoint (tablet button fallback for PS5 Circle)."""
+    pos = ros_node._publisher_methods.status_manager.current_position
+    lat = pos.get("latitude", 0.0)
+    lon = pos.get("longitude", 0.0)
+    if lat == 0.0 and lon == 0.0:
+        return {"status": "error", "message": "Kein GPS-Signal verfügbar"}
+    wp = {"latitude": lat, "longitude": lon}
+    await connection_manager.broadcast({"type": "waypoint_saved", "data": wp})
+    return {"status": "success", "waypoint": wp}
+

@@ -52,10 +52,10 @@
                 <img id="camera-feed" alt="Kamera" />
             </div>
             <div class="camera-switch-buttons">
-                <button class="camera-switch-btn active" data-camera="main">RGB</button>
-                <button class="camera-switch-btn" data-camera="thermal1">Thermal 1</button>
-                <button class="camera-switch-btn" data-camera="thermal2">Thermal 2</button>
-                <button class="camera-switch-btn debug-only" data-camera="lidar_debug">LiDAR Debug</button>
+                <button class="camera-switch-btn active" data-camera="main">⬇ Bodenkamera</button>
+                <button class="camera-switch-btn" data-camera="thermal2">⬆ Frontkamera</button>
+                <button class="camera-switch-btn" data-camera="rgb2">⬅ Rückkamera</button>
+                <button class="camera-switch-btn" data-camera="thermal1">🌡 Wärmebild</button>
             </div>
         </div>
 
@@ -374,15 +374,20 @@
             wsCamera.onerror = () => {
                 updateConnectionStatus(false);
             };
+            wsCamera.binaryType = 'blob';
             wsCamera.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.type === 'camera') {
-                    const container = document.getElementById('camera-container');
-                    const img = document.getElementById('camera-feed');
-                    img.src = 'data:image/jpeg;base64,' + data.data;
-                    container.classList.add('has-frame');
-                    lastCameraFrameTime = Date.now();
+                const container = document.getElementById('camera-container');
+                const img = document.getElementById('camera-feed');
+                if (event.data instanceof Blob) {
+                    img.src = URL.createObjectURL(event.data);
+                } else {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'camera') {
+                        img.src = 'data:image/jpeg;base64,' + data.data;
+                    }
                 }
+                container.classList.add('has-frame');
+                lastCameraFrameTime = Date.now();
             };
         }
         

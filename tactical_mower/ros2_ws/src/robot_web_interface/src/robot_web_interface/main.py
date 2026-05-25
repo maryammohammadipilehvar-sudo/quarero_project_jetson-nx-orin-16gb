@@ -98,12 +98,16 @@ class CacheControlStaticFiles(StarletteStaticFiles):
         return response
 
 
-def html_response(file_path: str) -> FileResponse:
+def html_response(file_path: str) -> Response:
     """
-    Helper function to serve HTML files with proper Cache-Control headers.
-    Ensures browser always revalidates HTML pages to get latest version.
+    Serve HTML with cache-busting version injected into static asset URLs.
+    Replaces __APP_VERSION__ placeholders so browsers fetch fresh JS/CSS
+    after each deploy instead of serving stale cached scripts.
     """
-    response = FileResponse(file_path)
+    with open(file_path, "r") as f:
+        content = f.read()
+    content = content.replace("__APP_VERSION__", get_app_version())
+    response = Response(content=content, media_type="text/html")
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 

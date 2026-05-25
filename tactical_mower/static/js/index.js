@@ -1331,26 +1331,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         async function toggleCharging() {
             if (chargingPending) return;
-            
+
             const newState = !chargingStatus;
-            
-            // Show confirmation dialog when turning ON charging
-            if (newState) {
-                const confirmed = confirm(
-                    '⚠️ WARNUNG: Ladevorgang aktivieren\n\n' +
-                    'Das Einschalten des Ladevorgangs aktiviert die Relais für die Ladekontakte. ' +
-                    'Dies kann gefährlich sein, wenn der Roboter nicht korrekt auf der Ladestation geparkt ist!\n\n' +
-                    'Stellen Sie sicher, dass:\n' +
-                    '• Der Roboter korrekt positioniert ist\n' +
-                    '• Die Ladekontakte richtig ausgerichtet sind\n' +
-                    '• Keine Personen in der Nähe sind\n\n' +
-                    'Möchten Sie fortfahren?'
-                );
-                
-                if (!confirmed) {
-                    return;
-                }
-            }
 
             const btn = document.getElementById('charging-btn');
             const text = document.getElementById('charging-text');

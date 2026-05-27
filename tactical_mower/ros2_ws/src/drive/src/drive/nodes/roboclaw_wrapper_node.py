@@ -42,6 +42,16 @@ class RoboclawWrapperNode(Node):
                 ('duty_mode', True),
                 ('velocity_qpps_to_duty_factor', 8),
                 ('drive_acceleration_factor', 0.8),
+                # Separate accel for brake (qpps==0 target). DutyAccel actively
+                # drives PWM down the ramp, which gives regen braking torque
+                # for the duration of the ramp. Roboclaw's H-bridge mode at
+                # duty=0 on this unit is COAST (verified 2026-05-22) so once
+                # the ramp completes there's no electrical brake — we want the
+                # ramp itself to do the braking, fast but not jarring. Factor
+                # 1.5 → ramp from full duty (32767) to 0 in ~0.67s (vs 1.25s at
+                # drive factor 0.8). Empirically tuned: 2.5 made the chassis
+                # jump on stop; 0.8 was the original 2–3 s hang.
+                ('brake_acceleration_factor', 0.8),
                 # /cmd_drive watchdog: if no command in this many seconds, brake.
                 # Without this, the Roboclaw holds the last DutyAccel target
                 # indefinitely (CLAUDE.md §1 missing-watchdog hazard).
@@ -73,6 +83,7 @@ class RoboclawWrapperNode(Node):
         # Load parameters
         self.duty_mode = self.get_parameter('duty_mode').get_parameter_value().bool_value
         self.drive_accel = int(2**15 * self.get_parameter('drive_acceleration_factor').get_parameter_value().double_value)
+        self.brake_accel = int(2**15 * self.get_parameter('brake_acceleration_factor').get_parameter_value().double_value)
         self.velocity_qpps_to_duty_factor = self.get_parameter('velocity_qpps_to_duty_factor').get_parameter_value().integer_value
         
         # Load battery configuration
@@ -119,6 +130,12 @@ class RoboclawWrapperNode(Node):
         if not self.rc.Open():
             self.log.fatal(f"Could not open serial port {self.serial_port}")
             raise RuntimeError("RoboClaw serial connection failed")
+
+        # Active brake: small reverse duty target (~2.5%) to prevent
+        # Roboclaw coast mode at duty=0. The ramp through zero provides
+        # electromagnetic braking; the reverse keeps the H-bridge active.
+        self._BRAKE_REVERSE_DUTY = 800
+        self._last_drive_duty = {"drive_left": 0, "drive_right": 0}
 
         # Motor mapping
         self.roboclaw_mapping = {
@@ -367,24 +384,48 @@ class RoboclawWrapperNode(Node):
         if props["flip"]:
             qpps = -qpps
 
+        if qpps == 0:
+            # Active braking: ramp to a small reverse duty instead of 0.
+            # At duty=0 the Roboclaw H-bridge coasts (verified 2026-05-22).
+            # Ramping past zero keeps the motor under active control and
+            # provides electromagnetic braking the entire way.
+            last = self._last_drive_duty[motor_name]
+            if last > 0:
+                target = -self._BRAKE_REVERSE_DUTY
+            elif last < 0:
+                target = self._BRAKE_REVERSE_DUTY
+            else:
+                target = 0
+            accel = self.brake_accel
+        else:
+            target = qpps
+            accel = self.drive_accel
+            self._last_drive_duty[motor_name] = qpps
+
         with self._rc_lock:
             if props["channel"] == "M1":
                 if self.duty_mode:
-                    self.rc.DutyAccelM1(props["address"], self.drive_accel, qpps)
+                    self.rc.DutyAccelM1(props["address"], accel, target)
                 else:
-                    self.rc.SpeedAccelM1(props["address"], self.drive_accel, qpps)
+                    self.rc.SpeedAccelM1(props["address"], accel, qpps)
             else:  # M2
                 if self.duty_mode:
-                    self.rc.DutyAccelM2(props["address"], self.drive_accel, qpps)
+                    self.rc.DutyAccelM2(props["address"], accel, target)
                 else:
-                    self.rc.SpeedAccelM2(props["address"], self.drive_accel, qpps)
+                    self.rc.SpeedAccelM2(props["address"], accel, qpps)
 
     def _slam_brake(self):
-        """DutyAccel(drive_accel, 0) on both motors. Used by watchdog and shutdown."""
+        """Active-brake both motors. Used by watchdog and shutdown."""
         try:
+            left_last = self._last_drive_duty.get("drive_left", 0)
+            right_last = self._last_drive_duty.get("drive_right", 0)
+            left_target = (-self._BRAKE_REVERSE_DUTY if left_last > 0
+                           else self._BRAKE_REVERSE_DUTY if left_last < 0 else 0)
+            right_target = (-self._BRAKE_REVERSE_DUTY if right_last > 0
+                            else self._BRAKE_REVERSE_DUTY if right_last < 0 else 0)
             with self._rc_lock:
-                self.rc.DutyAccelM1(self.addresses[0], self.drive_accel, 0)
-                self.rc.DutyAccelM2(self.addresses[0], self.drive_accel, 0)
+                self.rc.DutyAccelM1(self.addresses[0], self.brake_accel, left_target)
+                self.rc.DutyAccelM2(self.addresses[0], self.brake_accel, right_target)
         except Exception as e:
             self.log.error(f"[brake] slam_brake write failed: {e}")
 

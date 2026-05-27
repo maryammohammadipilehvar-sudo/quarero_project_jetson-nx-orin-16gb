@@ -1,17 +1,27 @@
 auto_charge_return: true
-battery_threshold: 28
+battery_threshold: 20
 charge_detection_radius: 0.8
 charge_point:
-  latitude: 48.65457244445798
-  longitude: 9.224030264874573
-  yaw: 168.87882450191105
-enable_obstacle_avoidance: false
+  latitude: 48.98076910753824
+  longitude: 8.375692867943588
+  yaw: 129.13299899535892
+enable_obstacle_avoidance: true
 home_point:
-  latitude: 48.65456897903391
-  longitude: 9.22405695122272
+  latitude: 48.98075517137951
+  longitude: 8.375710144692098
 home_tolerance: 0.5
 max_route_distance: 3.0
 security_always_enable_event_types: []
+security_arrival:
+  notifications:
+    enabled: false
+    last_test_at: '2026-05-23T15:56:22.999234+00:00'
+    last_test_error: ''
+    last_test_forced: true
+    last_test_success: true
+    quiet_hours_from: '23:00'
+    quiet_hours_to: 07:00
+    topic: quarero-arrival-QB_HfcVm38ve2DEKvv7UdQ
 security_email:
   enabled: false
   password: ''
@@ -27,5 +37,5 @@ security_event_defaults:
   pre_event_seconds: 10.0
 security_notification_windows: []
 security_video_capture_timeout_seconds: 60
-speed_factor: 0.988
+speed_factor: 1.14
 waypoint_tolerance: 0.5

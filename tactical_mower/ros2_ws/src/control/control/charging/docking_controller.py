@@ -44,7 +44,8 @@ class DockingConfig:
     
     # Speed settings
     max_speed: float = 1.0
-    docking_speed_ratio: float = 0.3  # 30% of max_speed, constant
+    docking_speed_ratio: float = 0.3  # 30% of max_speed — used in critical/final zone
+    docking_approach_speed_ratio: float = 0.5  # 50% of max_speed — used before critical zone (grass traction)
     undock_speed_ratio: float = 0.4    # 40% of max_speed for undocking (backwards) - increased to overcome friction/resistance
     
     # Undocking settings
@@ -761,12 +762,15 @@ class DockingController:
         self._debug.steering_p_component = p_total
         self._debug.steering_d_component = d_total
         
-        # Constant speed
-        speed = self._get_constant_speed()
-        
+        # Speed: higher approach speed outside critical zone for grass traction
+        if in_critical_zone:
+            speed = self._get_constant_speed()
+        else:
+            speed = self.config.docking_approach_speed_ratio * 100.0
+
         self._debug.steering_command = steering
         self._debug.speed_command = speed
-        
+
         # Check if docked
         if distance_to_charge < self.config.charge_position_tolerance:
             self._state = DockingState.DOCKED

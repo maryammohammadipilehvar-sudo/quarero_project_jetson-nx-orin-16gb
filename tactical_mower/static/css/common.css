@@ -161,6 +161,30 @@ textarea {
 .main-status-panel.main-status-red   { border-left-color: #cf222e; }
 .main-status-panel.main-status-gray  { border-left-color: #9aa1ab; }
 
+.dashboard-battery-lock {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #fff3e0;
+    border: 2px solid #ff9800;
+    border-left: 6px solid #e65100;
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-size: 1.05rem;
+    color: #bf360c;
+    line-height: 1.5;
+    grid-column: 1 / -1;
+    animation: battery-lock-pulse 2s ease-in-out 3;
+}
+.dashboard-battery-lock-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+}
+@keyframes battery-lock-pulse {
+    0%, 100% { border-color: #ff9800; }
+    50% { border-color: #e65100; background: #ffe0b2; }
+}
+
 .main-status-top {
     display: grid;
     grid-template-columns: auto 1fr auto;

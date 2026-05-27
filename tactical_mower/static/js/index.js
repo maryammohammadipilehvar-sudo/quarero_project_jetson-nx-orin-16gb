@@ -485,11 +485,20 @@
             if (charging) {
                 icon = '🔌';
                 headline = `Lädt — ${Math.round(battery)} %`;
-                detail = 'Roboter steht an der Ladestation.';
+                if (battery < 80) {
+                    detail = `Missionen ab 80 % möglich. Aktuell: ${Math.round(battery)} %`;
+                } else {
+                    detail = 'Roboter steht an der Ladestation.';
+                }
                 color = 'green';
+            } else if (battery < 20 && autonomousOn && !routeName) {
+                icon = '🪫';
+                headline = `Akku zu niedrig — ${Math.round(battery)} %`;
+                detail = 'Keine Missionen möglich. Roboter muss erst auf 80 % laden.';
+                color = 'red';
             } else if (routeName) {
                 icon = '🚗';
-                headline = `Fährt Route „${routeName}“`;
+                headline = `Fährt Route „${routeName}”`;
                 if (wpIdx != null && wpTotal) {
                     detail = `Wegpunkt ${wpIdx + 1} von ${wpTotal}`;
                 } else {
@@ -527,6 +536,11 @@
                 if (pct < 20) bFill.classList.add('main-battery-low');
                 else if (pct < 50) bFill.classList.add('main-battery-mid');
                 else bFill.classList.add('main-battery-high');
+            }
+
+            const lockBanner = document.getElementById('dashboard-battery-lock');
+            if (lockBanner) {
+                lockBanner.style.display = (battery < 20 && !charging) ? 'flex' : 'none';
             }
         }
 
@@ -1203,24 +1217,31 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
         async function startSelectedRouteNow() {
-            const routeName = document.getElementById('route-select').value;
+            const sel = document.getElementById('route-select');
+            let routeName = sel.value;
             if (!routeName) {
-                alert('Bitte erst eine Route auswählen!');
-                return;
+                const opts = Array.from(sel.options).filter(o => o.value);
+                if (opts.length === 0) {
+                    alert('Keine Route vorhanden. Bitte zuerst eine Route erstellen.');
+                    return;
+                }
+                routeName = opts[0].value;
+                sel.value = routeName;
+                loadSelectedRoute();
             }
-            if (!confirm(`Route "${routeName}" jetzt starten?\n\nHinweis: Autonomer Betrieb muss aktiviert sein, sonst fährt der Roboter nicht.`)) {
+            if (!confirm(`Route "${routeName}" jetzt starten?`)) {
                 return;
             }
             try {
                 const response = await fetch(`/api/routes/start_now/${encodeURIComponent(routeName)}`, { method: 'POST' });
                 const data = await response.json();
                 if (data.status === 'success') {
-                    alert(`✅ Route '${data.route}' gestartet (${data.waypoints} Wegpunkte).\n\nDen autonomen Betrieb einschalten, falls noch nicht aktiv.`);
+                    alert(`✅ Route "${data.route}" gestartet.`);
                 } else {
                     alert('❌ ' + (data.message || 'Unbekannter Fehler'));
                 }
             } catch (e) {
-                alert('❌ Netzwerkfehler: ' + e.message);
+                alert('❌ Verbindungsfehler: ' + e.message);
             }
         }
 
@@ -1350,7 +1371,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lightPending = true;
             btn.disabled = true;                // UI blockieren
             const oldText = text.textContent;   // alten Text merken
-            text.textContent = 'Warte auf ACK…';
+            text.textContent = 'Bitte warten…';
 
             try {
                 const response = await fetch('/api/control/light', { 
@@ -1427,13 +1448,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const newState = !chargingStatus;
 
+            if (!newState && chargingStatus) {
+                if (!confirm('Ladevorgang wirklich beenden?')) return;
+            }
+
             const btn = document.getElementById('charging-btn');
             const text = document.getElementById('charging-text');
 
             chargingPending = true;
             btn.disabled = true;
             const oldText = text.textContent;
-            text.textContent = 'Warte auf ACK…';
+            text.textContent = 'Bitte warten…';
 
             try {
                 const response = await fetch('/api/control/charge/manual', { 
@@ -2013,18 +2038,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        async function toggleAutonomousMode() {
+            if (autonomousOperationEnabled) {
+                if (!confirm('Automatik ausschalten? Der Roboter hält an.')) return;
+            }
+            await stopAutonomous();
+        }
+
         function updateStopButton() {
             const btn = document.getElementById('autonomous-btn');
             if (!btn) return;
-            
+
             const btnText = btn.querySelector('.btn-text');
-            
+
             if (autonomousOperationEnabled) {
                 btn.className = 'btn-start btn-large';
-                btnText.textContent = 'Autonom: An';
+                btnText.textContent = 'Automatik Ein';
             } else {
                 btn.className = 'btn-stop btn-large';
-                btnText.textContent = 'Autonom: Aus';
+                btnText.textContent = 'Automatik Aus';
             }
         }
 

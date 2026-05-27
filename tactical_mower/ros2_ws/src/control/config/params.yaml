@@ -17,7 +17,7 @@ tactical_wp_follower:
     control_frequency: 10.0
     max_steering: 100.0
     replan_check_interval: 3.0  # [s] Interval between path collision checks (<=0 for continuous checking)
-    tf_timeout: 1.0  # [s] Timeout for TF lookups
+    tf_timeout: 0.01  # [s] Timeout for TF lookups — fast fail, GPS fallback keeps 10 Hz loop
     
     # Transform offsets (for static TF publishing)
     transforms:

@@ -23,6 +23,7 @@ class DockingSubState(IntEnum):
     APPROACH_LINE = 10      # Move to line at home position
     ALIGN_TO_LINE = 20      # Rotate to face charge point
     FOLLOW_LINE = 30        # Follow discretized line with corrections
+    REALIGN = 35            # Pause in final zone to correct lateral/heading drift
     COMPLETED = 40
 
 
@@ -36,6 +37,7 @@ class DockingConfig:
     # Speed settings
     max_speed: float = 1.0
     docking_speed_ratio: float = 0.3
+    approach_speed_ratio: float = 0.3  # 30% outside critical zone — kept slow near charging station structure
     
     # Steering settings
     max_steering: float = 100.0
@@ -53,7 +55,21 @@ class DockingConfig:
     
     # Final approach zone (last 30cm)
     final_approach_distance: float = 0.30
-    
+
+    # Creep zone (last 15cm) — ultra-slow for precision landing
+    creep_zone_distance: float = 0.15
+    creep_speed_ratio: float = 0.12
+
+    # Consecutive docking confirmation (filter GPS noise)
+    docked_confirm_readings: int = 3
+
+    # Re-alignment in final zone: pause if lateral error exceeds this
+    realign_lateral_threshold: float = 0.03
+    realign_heading_threshold: float = 5.0
+
+    # Safety: abort FOLLOW_LINE if travel exceeds this multiple of line length
+    max_travel_ratio: float = 2.0
+
     # Alignment settings (degrees)
     alignment_tolerance: float = 2.0
     
@@ -132,7 +148,17 @@ class DockingState(BaseState):
         
         # Configuration (will be set from node parameters or defaults)
         self._config = DockingConfig()
-        
+
+        # Consecutive docking confirmation counter
+        self._docked_confirm_counter: int = 0
+
+        # Cooldown after REALIGN to prevent oscillation (iterations at 10 Hz)
+        self._realign_cooldown: int = 0
+
+        # Safety: track FOLLOW_LINE entry position for travel distance check
+        self._follow_line_start_pos: Optional[Tuple[float, float]] = None
+        self._follow_line_log_counter: int = 0
+
         # Coordinate transformer (will be passed via kwargs)
         self._coord_transformer = None
     
@@ -233,7 +259,7 @@ class DockingState(BaseState):
         """
         super().on_enter(previous_state, context)
         self._logger.info("Entering DOCKING state")
-        
+
         # Reset docking state
         self._docking_sub_state = DockingSubState.IDLE
         self._charge_point_enu = None
@@ -247,6 +273,10 @@ class DockingState(BaseState):
         self._deadlock_check_yaw = None
         self._deadlock_check_time = None
         self._deadlock_steering_boost = 0.0
+        self._docked_confirm_counter = 0
+        self._realign_cooldown = 0
+        self._follow_line_start_pos = None
+        self._follow_line_log_counter = 0
     
     def on_exit(self, next_state: RobotState, context: RobotStateContext):
         """Called when exiting DOCKING state.
@@ -355,12 +385,24 @@ class DockingState(BaseState):
                         return 0.0, 0.0
             
         if distance_to_charge < self._config.charge_position_tolerance:
-                self._docking_sub_state = DockingSubState.COMPLETED
-                on_docked = kwargs.get('on_docked')
-                if on_docked:
-                    on_docked()
-                self._logger.info(f"Docking complete - reached charge position (distance: {distance_to_charge:.3f}m)")
-                return 0.0, 0.0
+                self._docked_confirm_counter += 1
+                if self._docked_confirm_counter >= self._config.docked_confirm_readings:
+                    self._docking_sub_state = DockingSubState.COMPLETED
+                    on_docked = kwargs.get('on_docked')
+                    if on_docked:
+                        on_docked()
+                    self._logger.info(
+                        f"Docking complete - confirmed at charge position "
+                        f"({self._docked_confirm_counter} readings, distance: {distance_to_charge:.3f}m)"
+                    )
+                    return 0.0, 0.0
+                else:
+                    self._logger.info(
+                        f"Docking proximity {self._docked_confirm_counter}/{self._config.docked_confirm_readings} "
+                        f"(distance: {distance_to_charge:.3f}m)"
+                    )
+        else:
+                self._docked_confirm_counter = 0
         
         # Execute current docking sub-state
         on_docked = kwargs.get('on_docked')
@@ -373,6 +415,8 @@ class DockingState(BaseState):
             return self._execute_align_to_line(robot_x, robot_y, heading, on_aligned)
         elif self._docking_sub_state == DockingSubState.FOLLOW_LINE:
             return self._execute_follow_line(robot_x, robot_y, heading, on_docked)
+        elif self._docking_sub_state == DockingSubState.REALIGN:
+            return self._execute_realign(robot_x, robot_y, heading)
         elif self._docking_sub_state == DockingSubState.COMPLETED:
             return 0.0, 0.0
         
@@ -436,7 +480,18 @@ class DockingState(BaseState):
         
         # Start docking sub-state machine
         self._docking_sub_state = DockingSubState.APPROACH_LINE
-        self._logger.info("Docking procedure started - APPROACH_LINE phase")
+        self._follow_line_start_pos = None
+        self._follow_line_log_counter = 0
+
+        ldx = self._charge_point_enu[0] - self._home_position_enu[0]
+        ldy = self._charge_point_enu[1] - self._home_position_enu[1]
+        ll = math.sqrt(ldx * ldx + ldy * ldy)
+        self._logger.info(
+            f"Docking started: home_enu=({self._home_position_enu[0]:.3f},{self._home_position_enu[1]:.3f}), "
+            f"charge_enu=({self._charge_point_enu[0]:.3f},{self._charge_point_enu[1]:.3f}), "
+            f"line_length={ll:.3f}m, line_dir={math.degrees(self._line_direction_rad):.1f}°, "
+            f"origin=({origin_gps[0]:.8f},{origin_gps[1]:.8f})"
+        )
         
         return True
     
@@ -576,11 +631,49 @@ class DockingState(BaseState):
         if not self._path_points or not self._charge_point_enu or self._line_direction_rad is None:
             self._logger.error("DOCKING: Missing path points or charge position")
             return 0.0, 0.0
-        
+
+        # Track entry position for travel-distance safety check
+        if self._follow_line_start_pos is None:
+            self._follow_line_start_pos = (robot_x, robot_y)
+            self._logger.info(
+                f"FOLLOW_LINE started: robot=({robot_x:.3f},{robot_y:.3f}), "
+                f"charge_enu=({self._charge_point_enu[0]:.3f},{self._charge_point_enu[1]:.3f}), "
+                f"home_enu=({self._home_position_enu[0]:.3f},{self._home_position_enu[1]:.3f})"
+            )
+
         # Calculate distance to charge point
         dx = self._charge_point_enu[0] - robot_x
         dy = self._charge_point_enu[1] - robot_y
         distance_to_charge = math.sqrt(dx * dx + dy * dy)
+
+        # Safety: abort if robot has traveled too far (coordinate mismatch protection)
+        sdx = robot_x - self._follow_line_start_pos[0]
+        sdy = robot_y - self._follow_line_start_pos[1]
+        travel_distance = math.sqrt(sdx * sdx + sdy * sdy)
+        line_length = math.sqrt(
+            (self._charge_point_enu[0] - self._home_position_enu[0]) ** 2
+            + (self._charge_point_enu[1] - self._home_position_enu[1]) ** 2
+        )
+        max_travel = max(line_length * self._config.max_travel_ratio, 1.0)
+        if travel_distance > max_travel:
+            self._logger.error(
+                f"DOCKING ABORT: traveled {travel_distance:.2f}m > "
+                f"limit {max_travel:.2f}m (line={line_length:.2f}m). "
+                f"Possible coordinate mismatch. Stopping."
+            )
+            self._docking_sub_state = DockingSubState.COMPLETED
+            if on_complete:
+                on_complete()
+            return 0.0, 0.0
+
+        # Periodic diagnostic log (every 10 iterations = 1 s)
+        self._follow_line_log_counter += 1
+        if self._follow_line_log_counter % 10 == 0:
+            self._logger.info(
+                f"FOLLOW_LINE: dist_charge={distance_to_charge:.3f}m, "
+                f"traveled={travel_distance:.2f}m/{max_travel:.2f}m, "
+                f"robot=({robot_x:.3f},{robot_y:.3f}), heading={math.degrees(heading):.1f}°"
+            )
         
         # Calculate signed lateral error
         lateral_error = self._compute_signed_lateral_error(robot_x, robot_y)
@@ -590,9 +683,10 @@ class DockingState(BaseState):
         line_heading_error_deg = math.degrees(line_heading_error)
         
         # Determine zone and select parameters
+        in_creep_zone = distance_to_charge < self._config.creep_zone_distance
         in_final_zone = distance_to_charge < self._config.final_approach_distance
         in_critical_zone = distance_to_charge < self._config.critical_zone_distance
-        
+
         if in_final_zone:
             w_lateral = self._config.weight_lateral_final
             max_lateral_correction = self._config.max_lateral_correction_final_deg
@@ -602,6 +696,26 @@ class DockingState(BaseState):
         else:
             w_lateral = self._config.weight_lateral
             max_lateral_correction = self._config.max_lateral_correction_deg
+
+        # Tick down re-alignment cooldown
+        if self._realign_cooldown > 0:
+            self._realign_cooldown -= 1
+
+        # Re-alignment check: if in final zone and drifted too far off line, pause and correct
+        if self._realign_cooldown == 0 and in_final_zone and (
+            abs(lateral_error) > self._config.realign_lateral_threshold
+            or abs(line_heading_error_deg) > self._config.realign_heading_threshold
+        ):
+            self._logger.info(
+                f"Docking re-alignment triggered at {distance_to_charge:.3f}m "
+                f"(lateral: {lateral_error*100:.1f}cm, heading: {line_heading_error_deg:.1f}°)"
+            )
+            self._docking_sub_state = DockingSubState.REALIGN
+            self._last_lateral_error = None
+            self._last_heading_error = None
+            self._deadlock_steering_boost = 0.0
+            self._realign_cooldown = 15  # ~1.5 s at 10 Hz before allowing another re-align
+            return 0.0, 0.0
         
         # STEERING STRATEGY: Heading alignment + lateral drift correction
         now = time.monotonic()
@@ -641,16 +755,42 @@ class DockingState(BaseState):
         self._last_heading_error = line_heading_error_deg
         self._last_update_time = now
         
-        # Constant speed (no ramping - parameters are tuned for this)
-        speed = self._get_constant_speed()
+        # Distance-based speed: approach → critical ramp → final → creep
+        if in_creep_zone:
+            speed = self._config.creep_speed_ratio * 100.0
+        elif in_final_zone:
+            ramp_range = self._config.final_approach_distance - self._config.creep_zone_distance
+            if ramp_range > 0:
+                t = (distance_to_charge - self._config.creep_zone_distance) / ramp_range
+                ratio = self._config.creep_speed_ratio + t * (self._config.docking_speed_ratio - self._config.creep_speed_ratio)
+            else:
+                ratio = self._config.creep_speed_ratio
+            speed = ratio * 100.0
+        elif in_critical_zone:
+            ramp_range = self._config.critical_zone_distance - self._config.final_approach_distance
+            if ramp_range > 0:
+                t = (distance_to_charge - self._config.final_approach_distance) / ramp_range
+                ratio = self._config.docking_speed_ratio + t * (self._config.approach_speed_ratio - self._config.docking_speed_ratio)
+            else:
+                ratio = self._config.docking_speed_ratio
+            speed = ratio * 100.0
+        else:
+            speed = self._config.approach_speed_ratio * 100.0
         
-        # Check if docked - check BEFORE returning commands to prevent overshoot
+        # Check if docked — require consecutive readings for confirmation
         if distance_to_charge < self._config.charge_position_tolerance:
-            self._docking_sub_state = DockingSubState.COMPLETED
-            if on_complete:
-                on_complete()
-            self._logger.info(f"Docking complete - reached charge position (distance: {distance_to_charge:.3f}m)")
-            return 0.0, 0.0
+            self._docked_confirm_counter += 1
+            if self._docked_confirm_counter >= self._config.docked_confirm_readings:
+                self._docking_sub_state = DockingSubState.COMPLETED
+                if on_complete:
+                    on_complete()
+                self._logger.info(
+                    f"Docking confirmed in follow_line "
+                    f"({self._docked_confirm_counter} readings, distance: {distance_to_charge:.3f}m)"
+                )
+                return 0.0, 0.0
+        else:
+            self._docked_confirm_counter = 0
         
         # Additional safety check: if we're very close and moving forward, check for overshoot
         # Check if we're past the charge point (overshooting)
@@ -674,9 +814,54 @@ class DockingState(BaseState):
         
         return steering, speed
     
+    def _execute_realign(
+        self,
+        robot_x: float,
+        robot_y: float,
+        heading: float,
+    ) -> Tuple[float, float]:
+        """Pause and re-align heading with approach line before resuming final approach.
+
+        Entered from FOLLOW_LINE when lateral or heading error exceeds threshold
+        in the final zone.  Pure rotation (no forward motion) until heading is
+        within alignment_tolerance of the line direction, then resume FOLLOW_LINE.
+        """
+        if self._line_direction_rad is None:
+            self._docking_sub_state = DockingSubState.FOLLOW_LINE
+            return 0.0, 0.0
+
+        # Compute lateral error to decide which direction to bias
+        lateral_error = self._compute_signed_lateral_error(robot_x, robot_y)
+
+        # Desired heading: line direction plus a small inward bias to close
+        # lateral gap (max ±8° bias so we don't overshoot the line).
+        bias_rad = 0.0
+        if abs(lateral_error) > 0.01:
+            bias_deg = min(8.0, abs(lateral_error) * 200.0)
+            bias_rad = math.radians(bias_deg) * (-1.0 if lateral_error > 0 else 1.0)
+
+        target_heading = self._normalize_angle(self._line_direction_rad + bias_rad)
+        yaw_error = self._normalize_angle(target_heading - heading)
+        yaw_error_deg = math.degrees(yaw_error)
+
+        if abs(yaw_error_deg) < self._config.alignment_tolerance:
+            self._logger.info(
+                f"Re-alignment complete (heading err: {yaw_error_deg:.1f}°, "
+                f"lateral: {lateral_error*100:.1f}cm) — resuming FOLLOW_LINE"
+            )
+            self._docking_sub_state = DockingSubState.FOLLOW_LINE
+            self._last_lateral_error = None
+            self._last_heading_error = None
+            self._deadlock_steering_boost = 0.0
+            return 0.0, 0.0
+
+        current_yaw_deg = math.degrees(heading)
+        steering = self._compute_rotation_steering(yaw_error_deg, current_yaw_deg)
+        return steering, 0.0
+
     def _compute_signed_lateral_error(self, robot_x: float, robot_y: float) -> float:
         """Compute signed lateral error from robot to line.
-        
+
         Positive = robot is LEFT of line (when facing charge point)
         Negative = robot is RIGHT of line
         """

@@ -215,6 +215,11 @@
                 card.style.borderLeftColor = '#4CAF50';
                 display.style.color = '#4CAF50';
             }
+
+            const lockBanner = document.getElementById('battery-lock-banner');
+            if (lockBanner) {
+                lockBanner.style.display = currentBattery < 20 ? 'flex' : 'none';
+            }
         }
 
         function updateBatteryDisplay() {

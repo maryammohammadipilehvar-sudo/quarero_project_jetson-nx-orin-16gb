@@ -136,6 +136,29 @@ html, body {
             color: #c62828;
         }
 
+        .battery-lock-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 1rem;
+        }
+
+        .battery-lock-icon {
+            font-size: 1.8rem;
+            color: #e65100;
+            flex-shrink: 0;
+        }
+
+        .battery-lock-text {
+            font-size: 0.9em;
+            color: #bf360c;
+            line-height: 1.5;
+        }
+
         #current-battery-card {
             margin-bottom: 1.25rem;
         }

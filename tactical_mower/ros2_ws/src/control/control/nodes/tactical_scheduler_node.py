@@ -113,6 +113,10 @@ class TacticalSchedulerNode(Node):
         self._log_warn_pub = self.create_publisher(String, '/tactical/logging/warn', 10)
         self._log_error_pub = self.create_publisher(String, '/tactical/logging/error', 10)
 
+        # Service client — used to disable autonomous mode when operator RTH arrives
+        self._autonomous_op_client = self.create_client(
+            CommandControl, '/control/autonomous_operation')
+
         # Services
         self.create_service(CommandControl, '/control/go_to_charge_pos_and_charge', self._go_to_charge_service)
         self.create_service(CommandControl, '/control/charge_manual', self._charge_manual_service)
@@ -164,6 +168,15 @@ class TacticalSchedulerNode(Node):
         
         # Low battery lock - prevents new missions until battery reaches target SoC
         self._low_battery_lock = False  # Set when battery drops below threshold during mission
+
+        # Set when charging_requested was intentionally held True at DOCKED entry
+        # (because robot returned due to low battery).  Cleared once battery reaches
+        # _target_charge_soc and we publish charging_requested=False.
+        self._charging_request_held = False
+
+        # Operator pressed RTH button — robot should go home and park (MANUAL mode).
+        # Distinct from auto-charge-return which charges and resumes.
+        self._manual_rth_active = False
         
         # Undock timer
         self._undock_timer = None
@@ -595,7 +608,7 @@ class TacticalSchedulerNode(Node):
 
             # Detect charging start transition (False → True)
             if self._unified_charging_state and not prev_charging_state:
-                if self._charge_return_triggered:
+                if self._charging_request_held:
                     self._log_info("🔋 Automatischer Ladevorgang gestartet (Rückkehr wegen niedrigem Batteriestand).")
                 else:
                     self._log_info("🔌 Manueller Ladevorgang gestartet.")
@@ -608,7 +621,23 @@ class TacticalSchedulerNode(Node):
                 if self._low_battery_lock and self._battery_level >= self._target_charge_soc:
                     self._low_battery_lock = False
                     self._log_info(f"Batteriestand {self._battery_level}% erreicht - Low-Battery-Lock aufgehoben. Ladevorgang läuft weiter bis 100%.")
-                
+
+                # When battery reaches target SOC, clear the held charging request.
+                # This allows ChargingState to auto-transition to UNDOCKING so the
+                # interrupted schedule can resume.
+                if (self._charging_request_held and
+                        self._battery_level is not None and
+                        self._battery_level >= self._target_charge_soc):
+                    self._charging_request_held = False
+                    charging_request_msg = Bool()
+                    charging_request_msg.data = False
+                    self._charging_requested_pub.publish(charging_request_msg)
+                    self._log_info(
+                        f"🔋 Batteriestand ausreichend ({self._battery_level}% >= "
+                        f"{self._target_charge_soc}%) — Ladeanforderung aufgehoben, "
+                        f"Mission wird fortgesetzt."
+                    )
+
                 # Check if we have a pending schedule waiting for sufficient battery
                 if self._pending_schedule_after_undock and self._overwritten_schedule_id:
                     if self._battery_level >= self._target_charge_soc:
@@ -633,13 +662,15 @@ class TacticalSchedulerNode(Node):
                 
                 # Charging continues until a new schedule triggers or manual undock is requested
 
-            # Battery check fires for BOTH manual and scheduled missions
-            # Uses robot FSM state (NAVIGATING) instead of internal mission_state
-            # so it works regardless of how the mission was started
-            if self._last_robot_state == 'NAVIGATING':
+            # Battery check fires in any autonomous driving state, not just
+            # NAVIGATING.  Previously only checked during NAVIGATING, which
+            # missed low-battery events during RETURNING_TO_HOME or brief IDLE
+            # gaps between route repetitions.
+            if self._last_robot_state in ('NAVIGATING', 'RETURNING_TO_HOME', 'IDLE', 'UNDOCKED'):
                 schedule_id = self._mission_state.get_current_schedule_id() if self._mission_state.is_active() else None
                 schedule = self._schedules.get(schedule_id) if schedule_id else None
-                threshold = schedule.get('battery_threshold', self._default_battery_threshold) if schedule else self._default_battery_threshold
+                raw_threshold = schedule.get('battery_threshold', self._default_battery_threshold) if schedule else self._default_battery_threshold
+                threshold = max(raw_threshold, self._min_battery_threshold)
                 auto_charge = schedule.get('auto_charge_return', self._default_auto_charge_return) if schedule else self._default_auto_charge_return
                 if self._battery_level is not None and self._battery_level < threshold:
                     if self._battery_level < self._min_battery_threshold:
@@ -651,10 +682,13 @@ class TacticalSchedulerNode(Node):
                             if schedule_id:
                                 self._overwritten_schedule_id = schedule_id
                             self._log_warn("Batteriestand kritisch – Rückkehr zur Basis eingeleitet.")
-                            charging_request_msg = Bool()
-                            charging_request_msg.data = True
-                            self._charging_requested_pub.publish(charging_request_msg)
-                            self._log_info("Ladevorgang angefordert - State Machine entscheidet.")
+                        # Publish every check cycle, not just once.  MANUAL mode
+                        # clears _charging_requested in the wp_follower; without
+                        # continuous re-publish the request is lost and the robot
+                        # never returns to charge after re-enabling autonomous.
+                        charging_request_msg = Bool()
+                        charging_request_msg.data = True
+                        self._charging_requested_pub.publish(charging_request_msg)
         except Exception:
             pass
 
@@ -806,29 +840,34 @@ class TacticalSchedulerNode(Node):
             self.get_logger().error(f"Error parsing charging status: {e}")
 
     def _go_to_charge_service(self, request, response):
-        """Handle go to charge position service."""
+        """Handle operator RTH button press.
+
+        Behaviour:
+        - Robot stops current navigation and returns to home position.
+        - Schedules are NOT deactivated (preserved for later resume).
+        - Once at home/docked, autonomous mode is DISABLED → robot parks in
+          MANUAL.  No auto-charging, no auto-resume.
+        - Operator can then:
+          • Press "Laden" to manually enable charging relay.
+          • Re-enable autonomous to resume the patrol schedule.
+        """
         command_id = request.command_id
         state = request.state
-        
+
         self.get_logger().info(f"Go to charge service called: {state} (command_id: {command_id})")
-        
+
         if state:
-            # Button press: save route info before deactivating (needed for home return)
-            if self._mission_state.is_active():
-                schedule_id = self._mission_state.get_current_schedule_id()
-                if schedule_id:
-                    route_idx, _ = self._mission_state.get_current_route_info()
-                    self._home_return_schedule_id = schedule_id
-                    self._home_return_route_idx = route_idx
-            # Deactivate ALL active schedules
-            self._deactivate_all_active_schedules()
-            # Publish charging request to topic - State Machine will handle it
+            # Stop current mission internally (keep schedules active in YAML)
+            self._stop_current_mission()
+            # Mark this as a manual RTH — when robot arrives at dock, we disable
+            # autonomous mode so it parks without auto-charging or auto-resuming.
+            self._manual_rth_active = True
+            # Publish charging_requested=True to trigger immediate RTH via state machine
             charging_request_msg = Bool()
             charging_request_msg.data = True
             self._charging_requested_pub.publish(charging_request_msg)
-            # Charging is handled by state machine via charging request topic
-            self._log_info("Ladevorgang angefordert - State Machine entscheidet.")
-            response.message = "Return to charging station started"
+            self._log_info("🏠 Rückkehr zur Basis gestartet.")
+            response.message = "Return to home started"
         else:
             # Clear charging request
             charging_request_msg = Bool()
@@ -1253,6 +1292,33 @@ class TacticalSchedulerNode(Node):
         
         # Charging state is now determined from robot state machine, no persistence needed
 
+    def _disable_autonomous_async(self):
+        """Disable autonomous mode via service call (non-blocking).
+
+        Used when operator RTH arrives at dock — transitions robot to MANUAL
+        so it parks without auto-charging or auto-resuming.
+        """
+        if not self._autonomous_op_client.wait_for_service(timeout_sec=0.5):
+            self.get_logger().warn("Autonomous operation service not available — cannot disable")
+            return
+        req = CommandControl.Request()
+        req.state = False
+        req.command_id = "scheduler_manual_rth"
+        future = self._autonomous_op_client.call_async(req)
+        future.add_done_callback(self._on_autonomous_disable_done)
+
+    def _on_autonomous_disable_done(self, future):
+        """Callback for autonomous disable service response."""
+        try:
+            result = future.result()
+            if result.success:
+                self.get_logger().info("Autonomous mode disabled (operator RTH park)")
+                self._log_info("🏠 Robot geparkt — autonomer Modus deaktiviert.")
+            else:
+                self.get_logger().warn(f"Failed to disable autonomous: {result.message}")
+        except Exception as e:
+            self.get_logger().error(f"Error disabling autonomous mode: {e}")
+
     def is_charging_relay_enabled(self) -> bool:
         """Check if charging relay is currently enabled.
         
@@ -1264,6 +1330,8 @@ class TacticalSchedulerNode(Node):
     def _abort_charging_sequence(self):
         """Abort charging sequence."""
         self._charging_pending = False
+        self._charging_request_held = False
+        self._manual_rth_active = False
         self._enable_charging_relay(False)
         
         undock_msg = Bool()
@@ -1301,6 +1369,7 @@ class TacticalSchedulerNode(Node):
     
     def _handle_charging_error(self):
         """Handle charging error."""
+        self._charging_request_held = False
         self._enable_charging_relay(False)
         self._is_undocking = False
         # Clear overwrite state on error
@@ -1489,12 +1558,36 @@ class TacticalSchedulerNode(Node):
             
             # Clear charging request when robot reaches DOCKED state
             if state == 'DOCKED':
-                # Clear charging request flag by publishing False
-                charging_request_msg = Bool()
-                charging_request_msg.data = False
-                self._charging_requested_pub.publish(charging_request_msg)
+                if self._manual_rth_active:
+                    # Operator-initiated RTH: disable autonomous so robot parks
+                    # in MANUAL mode.  No auto-charging, no auto-resume.
+                    self._manual_rth_active = False
+                    self._charging_request_held = False
+                    charging_request_msg = Bool()
+                    charging_request_msg.data = False
+                    self._charging_requested_pub.publish(charging_request_msg)
+                    self._disable_autonomous_async()
+                    self.get_logger().info(
+                        "DOCKED after operator RTH — disabling autonomous (robot will park in MANUAL)"
+                    )
+                elif self._charge_return_triggered:
+                    # Robot returned due to low battery — keep need_charge=True so
+                    # ChargingState blocks UNDOCKING until battery reaches target SOC.
+                    # The request will be cleared in _robot_status_callback once battery
+                    # reaches _target_charge_soc.
+                    self._charging_request_held = True
+                    self.get_logger().info(
+                        "DOCKED after low-battery return — keeping charging request active "
+                        f"until battery reaches {self._target_charge_soc}%"
+                    )
+                else:
+                    # Normal docking (not due to low battery) — clear charging request
+                    self._charging_request_held = False
+                    charging_request_msg = Bool()
+                    charging_request_msg.data = False
+                    self._charging_requested_pub.publish(charging_request_msg)
+                    self.get_logger().debug("Robot reached DOCKED state - clearing charging request")
                 self._charge_return_triggered = False  # Re-arm so next mission can auto-return
-                self.get_logger().debug("Robot reached DOCKED state - clearing charging request")
             
             # If robot is in CHARGING state and at charge position, enable charging relay
             # ONLY if we're not undocking (checked above)
@@ -1509,7 +1602,7 @@ class TacticalSchedulerNode(Node):
                     if previous_state in ['DOCKED', None]:
                         self.get_logger().info("Robot in CHARGING state at charge position — enabling charging relay.")
                         self._enable_charging_relay(True)
-                        if self._charge_return_triggered:
+                        if self._charging_request_held:
                             self._log_info("🔋 Automatischer Ladevorgang gestartet (Rückkehr wegen niedrigem Batteriestand).")
                         else:
                             self._log_info("🔌 Manueller Ladevorgang gestartet.")

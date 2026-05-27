@@ -93,8 +93,8 @@ async def save_battery_settings(battery_data: dict):
     """Save battery threshold"""
     try:
         threshold = battery_data.get("threshold")
-        if threshold is None or threshold < 5 or threshold > 50:
-            return {"status": "error", "message": "Threshold must be between 5 and 50"}
+        if threshold is None or threshold < 20 or threshold > 50:
+            return {"status": "error", "message": "Schwellwert muss zwischen 20 und 50 liegen"}
         settings = get_settings()
         settings["battery_threshold"] = int(threshold)
         save_settings_data(settings)

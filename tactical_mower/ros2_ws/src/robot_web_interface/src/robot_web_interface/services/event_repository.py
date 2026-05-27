@@ -95,6 +95,7 @@ class EventRepository:
             "device_name": metadata.get("device_name"),
             "has_videos": bool(metadata.get("video_files")),
             "email_sent": bool(metadata.get("email_sent")),
+            "class_label": metadata.get("class_label"),
         })
         try:
             self._save_index(index[:500])  # keep last 500

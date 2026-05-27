@@ -166,6 +166,10 @@ class RobotControllerNode(Node):
         self._active_route_waypoints: list = []  # List of waypoint dicts with lat, lon, alt
         self._active_route_mode: str = 'none'  # 'none', 'once', 'loop', 'ping_pong'
         self._active_route_name: str = ''  # Name of the active route
+        # Index of the waypoint the follower is currently targeting (mirrors the value
+        # published by tactical_wp_follower in /tactical/robot/state). None when no
+        # mission is loaded; 0 .. len(waypoints)-1 while a route is active.
+        self._active_route_current_wp_idx: Optional[int] = None
 
         # Timer for state publishing and web joystick processing
         self.create_timer(1.0, self._publish_state)
@@ -433,7 +437,7 @@ class RobotControllerNode(Node):
                 route = data['active_route']
                 self._active_route_name = route.get('name', '')
                 self._active_route_mode = route.get('mode', 'none')
-                
+
                 # Convert waypoints format (already in latitude/longitude/altitude format)
                 waypoints = route.get('waypoints', [])
                 self._active_route_waypoints = [
@@ -444,14 +448,21 @@ class RobotControllerNode(Node):
                     }
                     for wp in waypoints
                 ]
-                
+                # Forward the live waypoint index from the follower.
+                # Keep as None if upstream didn't include the field (older builds).
+                raw_idx = route.get('current_waypoint_index', None)
+                self._active_route_current_wp_idx = (
+                    int(raw_idx) if raw_idx is not None else None
+                )
+
                 self.get_logger().debug(
-                    f"Route updated from tactical state: '{self._active_route_name}' - {len(self._active_route_waypoints)} waypoints, mode={self._active_route_mode}"
+                    f"Route updated from tactical state: '{self._active_route_name}' - {len(self._active_route_waypoints)} waypoints, mode={self._active_route_mode}, wp_idx={self._active_route_current_wp_idx}"
                 )
             else:
                 # No active route
                 self._active_route_waypoints = []
                 self._active_route_mode = 'none'
+                self._active_route_current_wp_idx = None
                 self._active_route_name = ''
         except Exception as e:
             self.get_logger().error(f"Error parsing tactical robot state: {e}")
@@ -478,6 +489,7 @@ class RobotControllerNode(Node):
             self._active_route_waypoints = []
             self._active_route_mode = 'none'
             self._active_route_name = ''
+            self._active_route_current_wp_idx = None
         else:
             self._active_route_waypoints = [
                 {
@@ -487,6 +499,10 @@ class RobotControllerNode(Node):
                 }
                 for wp in msg.waypoints
             ]
+            # New GeoPath received → assume Cold Start. The live value will be
+            # corrected by the next /tactical/robot/state message once the
+            # follower reports actual progress.
+            self._active_route_current_wp_idx = 0
         
         self.get_logger().info(
             f"Route updated: '{self._active_route_name}' - {len(self._active_route_waypoints)} waypoints, mode={self._active_route_mode}"
@@ -531,6 +547,7 @@ class RobotControllerNode(Node):
                 "name": self._active_route_name,
                 "waypoints": self._active_route_waypoints,
                 "mode": self._active_route_mode,
+                "current_waypoint_index": self._active_route_current_wp_idx,
                 "distance_meters": self._calculate_route_distance(self._active_route_waypoints, self._active_route_mode) if self._active_route_waypoints else None
             }
         }

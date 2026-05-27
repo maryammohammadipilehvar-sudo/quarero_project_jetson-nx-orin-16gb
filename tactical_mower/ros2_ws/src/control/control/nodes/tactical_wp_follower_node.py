@@ -117,7 +117,7 @@ class TacticalWpFollowerNode(Node):
         vrtk_to_base_footprint_z = self.declare_parameter('transforms.vrtk_to_base_footprint.z', 0.0).value  # base_footprint is on ground
         
         # Load TF timeout parameter
-        tf_timeout = self.declare_parameter('tf_timeout', 1.0).value
+        tf_timeout = self.declare_parameter('tf_timeout', 0.01).value
         self._transform_manager.set_tf_timeout(tf_timeout)
         
         self._transform_manager.set_vrtk_to_base_transform(
@@ -1120,16 +1120,11 @@ class TacticalWpFollowerNode(Node):
         self._waypoint_follower.set_mode(mode_map.get(geopath.mode, WaypointMode.ONCE))
         self._waypoint_follower.set_waypoints(waypoints_map)
         
-        # Start mission from nearest waypoint
-        if self._last_gps:
-            current_pose_map = self._get_current_pose_map()
-            if current_pose_map:
-                nearest_idx = self._waypoint_follower.find_nearest_waypoint(current_pose_map)
-                self._waypoint_follower.start(start_index=nearest_idx)
-            else:
-                self._waypoint_follower.start()
-        else:
-            self._waypoint_follower.start()
+        # Always start from waypoint 0 for fresh route starts (scheduler
+        # repetitions, Run-Now).  find_nearest_waypoint caused instant route
+        # completion when the robot was already at the last waypoint — all
+        # remaining repetitions were consumed in < 1 s without movement.
+        self._waypoint_follower.start(start_index=0)
         
         # Verify that waypoint follower is actually active after start()
         # This is critical to prevent immediate transition to RETURNING_TO_HOME
@@ -1149,15 +1144,8 @@ class TacticalWpFollowerNode(Node):
             for wp in geopath.waypoints:
                 waypoints_list.append({'lat': float(wp.x), 'lon': float(wp.y), 'alt': float(wp.z)})
             
-            start_index = 0
-            if self._last_gps:
-                try:
-                    current_pose_map = self._get_current_pose_map()
-                    if current_pose_map:
-                        start_index = self._waypoint_follower.find_nearest_waypoint(current_pose_map)
-                except Exception:
-                    pass
-            
+            start_index = 0  # consistent with start(start_index=0) above
+
             # Convert mode to string for JSON serialization
             mode_map = {
                 GeoPath.ONCE: 'once',
@@ -1987,39 +1975,26 @@ class TacticalWpFollowerNode(Node):
         """
         pose: Optional[PoseStamped] = None
 
-        # Try TF-based lookup first (preferred method)
-        try:
-            tf_timeout = self.get_parameter('tf_timeout').value
-            pose = self._transform_manager.get_robot_pose_tf(
-                robot_base_frame="base_footprint",
-                global_frame="map",
-                timeout=tf_timeout
-            )
-        except Exception as e:
-            self.get_logger().debug(
-                f"TF-based pose lookup failed: {e}, falling back to GPS-based calculation"
-            )
-            pose = None
-
-        if pose is None:
-            # Fallback to GPS-based calculation (for compatibility)
-            if self._last_gps is None or self._last_orientation is None:
+        # GPS-based pose (fast, no blocking). TF inside this node is unreliable
+        # (buffer doesn't accumulate frames — see project_docking_precision_fix.md).
+        # GPS + Fixposition yaw override gives equivalent accuracy for RTK-based nav.
+        if self._last_gps is None or self._last_orientation is None:
+            return None
+        if self._transform_manager.get_map_origin() is None:
+            if not self._transform_manager.auto_set_map_origin_from_tf_and_gps(
+                self._last_gps, timeout=0.01
+            ):
                 return None
-            if self._transform_manager.get_map_origin() is None:
-                self.get_logger().debug(
-                    "Map origin not set yet, cannot compute GPS-based pose. Waiting for map origin to be set."
-                )
-                return None
-            x, y, z = self._transform_manager.gps_to_map(
-                self._last_gps[0], self._last_gps[1], self._last_gps[2]
-            )
-            pose = PoseStamped()
-            pose.header.stamp = self.get_clock().now().to_msg()
-            pose.header.frame_id = "map"
-            pose.pose.position.x = x
-            pose.pose.position.y = y
-            pose.pose.position.z = z
-            pose.pose.orientation = self._last_orientation
+        x, y, z = self._transform_manager.gps_to_map(
+            self._last_gps[0], self._last_gps[1], self._last_gps[2]
+        )
+        pose = PoseStamped()
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.header.frame_id = "map"
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        pose.pose.position.z = z
+        pose.pose.orientation = self._last_orientation
 
         # Override orientation with RTK dual-antenna yaw if available.
         # The odom/TF quaternion has been observed to be unreliable (random
@@ -2712,7 +2687,6 @@ class TacticalWpFollowerNode(Node):
                 elif steering is not None and speed is None:
                     self._publish_drive_command(steering, 0.0)
                 else:
-                    # No commands - state is waiting
                     pass
             return
         

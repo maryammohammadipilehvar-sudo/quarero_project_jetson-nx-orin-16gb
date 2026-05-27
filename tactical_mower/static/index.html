@@ -77,6 +77,15 @@
             </div>
         </div>
 
+        <!-- Battery lock warning banner -->
+        <div id="dashboard-battery-lock" class="dashboard-battery-lock" style="display: none;">
+            <span class="dashboard-battery-lock-icon">&#9888;</span>
+            <div>
+                <strong>Akku-Sperre aktiv</strong> — Akku zu niedrig, keine Missionen möglich.
+                Roboter muss erst auf mindestens 80 % laden.
+            </div>
+        </div>
+
         <!-- Map panel — hero element of the dashboard.  DOM-first so CSS grid
              can place it in the dominant left column on desktop.  Toolbar merges title,
              action buttons, route-info pill AND legend into one compact row
@@ -233,9 +242,9 @@
                     <span class="section-hint">Direkte Befehle an den Roboter</span>
                 </div>
                 <div class="control-action-grid control-cmd-grid">
-                    <button id="autonomous-btn" class="btn-stop btn-large" type="button" onclick="stopAutonomous()">
+                    <button id="autonomous-btn" class="btn-stop btn-large" type="button" onclick="toggleAutonomousMode()">
                         <span class="btn-icon" aria-hidden="true">🛡</span>
-                        <span class="btn-text">Autonom: Aus</span>
+                        <span class="btn-text">Automatik Aus</span>
                     </button>
 
                     <button class="btn-start btn-large" type="button" onclick="goToCharge()">

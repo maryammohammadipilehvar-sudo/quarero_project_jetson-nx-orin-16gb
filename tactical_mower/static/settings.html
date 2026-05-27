@@ -116,26 +116,34 @@
 
                     <div class="form-group">
                         <label>Akku-Schwellwert für Rückkehr zur Ladestation:</label>
-                        <p class="form-hint">Empfohlen: 15–25 %. Bei höherem Wert kehrt der Roboter früher zurück, bei niedrigerem Wert bleibt er länger im Einsatz.</p>
+                        <p class="form-hint">Minimum: 20 %. Bei höherem Wert kehrt der Roboter früher zurück.</p>
                         <div class="slider-container">
                             <input type="range" 
                                    id="battery-threshold" 
                                    class="battery-slider" 
-                                   min="5" 
+                                   min="20" 
                                    max="50" 
                                    value="20" 
                                    step="1"
                                    oninput="updateBatteryDisplay()">
                             <div class="slider-labels">
-                                <span>5%</span>
-                                <span>25%</span>
+                                <span>20%</span>
+                                <span>35%</span>
                                 <span>50%</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="battery-warning">
-                        Bei Unterschreiten wird die aktuelle Aufgabe unterbrochen und der Roboter kehrt zur Ladestation zurück.
+                        Bei Unterschreiten wird die aktuelle Mission unterbrochen und der Roboter kehrt zur Ladestation zurück. <strong>Missionen werden erst wieder freigegeben, wenn der Akku mindestens 80 % erreicht hat.</strong>
+                    </div>
+                </div>
+
+                <div id="battery-lock-banner" class="battery-lock-banner" style="display: none;">
+                    <div class="battery-lock-icon">&#9888;</div>
+                    <div class="battery-lock-text">
+                        <strong>Akku-Sperre aktiv</strong><br>
+                        Akku zu niedrig — keine Missionen möglich. Der Roboter muss erst auf mindestens 80 % laden.
                     </div>
                 </div>
 

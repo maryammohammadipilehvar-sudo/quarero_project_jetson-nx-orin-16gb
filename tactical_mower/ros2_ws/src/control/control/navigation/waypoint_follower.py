@@ -335,8 +335,19 @@ class WaypointFollower:
         heading_error = self._normalize_angle(angle_to_goal - current_heading)
         heading_error_deg = math.degrees(heading_error)
 
-        # If heading error large (>22.5°) rotate on the spot first.
-        if abs(heading_error_deg) > 22.5:
+        # Rotate-in-place gate with hysteresis to prevent bang-bang oscillation
+        # around a single threshold (RCA 2026-05-18: 85% of NAVIGATING was rotation
+        # because tiny heading wiggles crossed the old 22.5° line every tick).
+        # Enter rotation at 25°, exit at 15°. Once rotating, keep rotating until
+        # the error drops well inside the band; once driving, only re-enter
+        # rotation if the error grows clearly past the gate.
+        ROTATE_ENTER_DEG = 25.0
+        ROTATE_EXIT_DEG = 15.0
+        if self._is_rotating_in_place:
+            rotate_now = abs(heading_error_deg) > ROTATE_EXIT_DEG
+        else:
+            rotate_now = abs(heading_error_deg) > ROTATE_ENTER_DEG
+        if rotate_now:
             # Track rotation start time
             now = time.time()
             if self._rotation_start_time is None:

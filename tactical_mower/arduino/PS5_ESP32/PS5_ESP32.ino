@@ -42,6 +42,14 @@ uint16_t crc16_ccitt(const String& s) {
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 200;
 
+// Failsafe-Herzschlag: solange KEIN Controller L1 hält (oder gar keiner
+// verbunden ist), synthetisiert loop() im selben idx=...-Format wie
+// dumpGamepad() eine Null-Zeile auf Serial (USB-CDC zur Jetson).
+// Damit kann joy_controller_node.py den L1-Release auch dann erkennen,
+// wenn Bluepad32 mangels neuer HID-Reports nicht mehr processGamepad() aufruft.
+const unsigned long failsafeInterval = 20;   // 50 Hz
+unsigned long lastFailsafeTime = 0;
+
 unsigned long lastVibrationTime = 0;
 const unsigned long vibrationInterval = 30000;  // 30 Sekunden
 const unsigned long vibrationDuration = 1000;   // 1 Sekunden
@@ -80,111 +88,99 @@ ControllerPtr myControllers[BP32_MAX_GAMEPADS];
 
 // SoftwareSerial Serial1(myRX, myTX);
 
-// ========== NEU: UART-Empfang vom Jetson ==========
-// Buffer für eingehende UART-Nachrichten
+// ========== UART-Empfang vom Jetson ==========
+// Separate buffers: one per port so partial messages never interleave.
 String incomingUartBuffer = "";
+String incomingUsbBuffer  = "";
 
-// Funktion zum Parsen und Verarbeiten von UART-Befehlen vom Jetson
-void processIncomingUartCommand() {
-  if (Serial1.available()) {
-    char c = Serial1.read();
-    
-    if (c == '\n') {
-      // Komplette Nachricht empfangen
-      incomingUartBuffer.trim();
-      
-      if (incomingUartBuffer.length() > 0) {
-        Serial.print("UART RX: ");
-        Serial.println(incomingUartBuffer);
-        
-        // Nachricht in Payload und CRC aufteilen
-        int lastComma = incomingUartBuffer.lastIndexOf(',');
-        
-        if (lastComma > 0) {
-          String payload = incomingUartBuffer.substring(0, lastComma);
-          String crcStr = incomingUartBuffer.substring(lastComma + 1);
-          
-          // CRC validieren
-          uint16_t receivedCRC = strtol(crcStr.c_str(), NULL, 16);
-          uint16_t calculatedCRC = crc16_ccitt(payload);
-          
-          if (receivedCRC == calculatedCRC) {
-            Serial.println("CRC OK - Verarbeite Befehl");
-            
-            // Payload in einzelne Werte zerlegen
-            int values[8] = {0};
+// Shared command parser — called for both Serial1 (UART1 hw pins) and
+// Serial (USB-CDC).  Each caller passes its own buffer so the two
+// streams stay independent.  Debug output always goes to Serial (USB)
+// which is fine: TX and RX are separate hardware FIFOs, and the Jetson
+// joy parser only matches "idx=…" lines so our prints are harmless.
+void processCommandFromStream(Stream& port, String& buffer) {
+  if (!port.available()) return;
 
-            int idx = 0;
-            int startPos = 0;
-            
-            for (int i = 0; i <= payload.length() && idx < 8; i++) {
-              if (i == payload.length() || payload[i] == ',') {
-                values[idx] = payload.substring(startPos, i).toInt();
-                idx++;
-                startPos = i + 1;
-              }
+  char c = port.read();
+
+  if (c == '\n') {
+    buffer.trim();
+
+    if (buffer.length() > 0) {
+      Serial.print("UART RX: ");
+      Serial.println(buffer);
+
+      int lastComma = buffer.lastIndexOf(',');
+
+      if (lastComma > 0) {
+        String payload = buffer.substring(0, lastComma);
+        String crcStr  = buffer.substring(lastComma + 1);
+
+        uint16_t receivedCRC   = strtol(crcStr.c_str(), NULL, 16);
+        uint16_t calculatedCRC = crc16_ccitt(payload);
+
+        if (receivedCRC == calculatedCRC) {
+          Serial.println("CRC OK - Verarbeite Befehl");
+
+          int values[8] = {0};
+          int idx = 0;
+          int startPos = 0;
+
+          for (int i = 0; i <= (int)payload.length() && idx < 8; i++) {
+            if (i == (int)payload.length() || payload[i] == ',') {
+              values[idx] = payload.substring(startPos, i).toInt();
+              idx++;
+              startPos = i + 1;
             }
-            
-            // Werte verarbeiten:
-            // values[0] = mapRX
-            // values[1] = mapY
-            // values[2] = right
-            // values[3] = left
-            // values[4] = select
-            // values[5] = licht  <-- WICHTIG!
-            // values[6] = gps
-            // values[5] = akku laden  <-- WICHTIG!
-            
-            // Licht-GPIO setzen basierend auf Jetson-Befehl
-            if (values[5] == 1) {
-              digitalWrite(Licht, HIGH);
-              g_lichtToggleState = true;
-              Serial.println("Jetson: Licht EIN");
-            } else if (values[5] == 0) {
-              digitalWrite(Licht, LOW);
-              g_lichtToggleState = false;
-              Serial.println("Jetson: Licht AUS");
-            }
-
-            // Ladeport (values[7])
-            if (values[7] == 1) {
-                digitalWrite(Charging, HIGH);
-                Serial.println("Jetson: CHARGING ON");
-            } else {
-                digitalWrite(Charging, LOW);
-                Serial.println("Jetson: CHARGING OFF");
-            }
-
-            // Optional: Weitere GPIO-Pins basierend auf anderen Werten steuern
-            // z.B. GPS, Sirene etc.
-            
-          } else {
-            Serial.print("CRC FEHLER! Erwartet: ");
-            Serial.print(calculatedCRC, HEX);
-            Serial.print(", Empfangen: ");
-            Serial.println(receivedCRC, HEX);
           }
+
+          // values[5] = licht, values[7] = charging
+          if (values[5] == 1) {
+            digitalWrite(Licht, HIGH);
+            g_lichtToggleState = true;
+            Serial.println("Jetson: Licht EIN");
+          } else if (values[5] == 0) {
+            digitalWrite(Licht, LOW);
+            g_lichtToggleState = false;
+            Serial.println("Jetson: Licht AUS");
+          }
+
+          if (values[7] == 1) {
+            digitalWrite(Charging, HIGH);
+            Serial.println("Jetson: CHARGING ON");
+          } else {
+            digitalWrite(Charging, LOW);
+            Serial.println("Jetson: CHARGING OFF");
+          }
+
         } else {
-          Serial.println("Ungültiges Format (kein Komma gefunden)");
+          Serial.print("CRC FEHLER! Erwartet: ");
+          Serial.print(calculatedCRC, HEX);
+          Serial.print(", Empfangen: ");
+          Serial.println(receivedCRC, HEX);
         }
+      } else {
+        Serial.println("Ungültiges Format (kein Komma gefunden)");
       }
-      
-      // Buffer für nächste Nachricht leeren
-      incomingUartBuffer = "";
-      
-    } else {
-      // Zeichen zum Buffer hinzufügen
-      incomingUartBuffer += c;
-      
-      // Sicherheit: Buffer-Overflow verhindern
-      if (incomingUartBuffer.length() > 100) {
-        Serial.println("WARNUNG: UART Buffer overflow - wird geleert");
-        incomingUartBuffer = "";
-      }
+    }
+
+    buffer = "";
+
+  } else {
+    buffer += c;
+
+    if (buffer.length() > 100) {
+      Serial.println("WARNUNG: UART Buffer overflow - wird geleert");
+      buffer = "";
     }
   }
 }
-// ========== ENDE NEU ==========
+
+// Legacy UART1 path (hw pins 18/15 @ 19200) — kept for backwards compat.
+void processIncomingUartCommand() {
+  processCommandFromStream(Serial1, incomingUartBuffer);
+}
+// ========== ENDE UART-Empfang ==========
 
 
 // This callback gets called any time a new gamepad is connected.
@@ -414,6 +410,31 @@ void processGamepad(ControllerPtr ctl) {
 }
 
 
+// True, wenn irgendein verbundener Controller gerade L1 (Deadman) hält.
+static bool anyDeadmanHeld() {
+  for (auto c : myControllers) {
+    if (c && c->isConnected() && c->isGamepad() && c->l1()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Druckt eine synthetische Null-Zeile im exakt selben Format wie
+// dumpGamepad(), damit der Jetson-Parser (ESP_JOY_LINE) sie matched.
+// Nur Throttle: 50 Hz, und nur wenn L1 NICHT gehalten wird — sonst
+// soll dumpGamepad() weiter die echten Werte streamen.
+void emitFailsafeIdxLine() {
+  if (millis() - lastFailsafeTime < failsafeInterval) return;
+  if (anyDeadmanHeld()) return;
+  Serial.printf(
+    "idx=0, dpad: 0x00, buttons: 0x0000, axis L:    0,    0, axis R:    0,    0, "
+    "brake:    0, throttle:    0, misc: 0x00, gyro x:     0 y:     0 z:     0, "
+    "accel x:     0 y:     0 z:     0\n"
+  );
+  lastFailsafeTime = millis();
+}
+
 void processControllers() {
   for (auto myController : myControllers) {
     if (myController && myController->isConnected() && myController->hasData()) {
@@ -522,9 +543,12 @@ void loop() {
   if (dataUpdated)
     processControllers();
 
-  // ========== NEU: UART-Empfang vom Jetson prüfen ==========
+  // Failsafe-Herzschlag: Null-Zeile bei losem L1 / fehlendem Controller.
+  emitFailsafeIdxLine();
+
+  // UART-Empfang vom Jetson: check both Serial1 (hw UART1) and Serial (USB-CDC)
   processIncomingUartCommand();
-  // ========== ENDE NEU ==========
+  processCommandFromStream(Serial, incomingUsbBuffer);
 
   // The main loop must have some kind of "yield to lower priority task" event.
   // Otherwise, the watchdog will get triggered.

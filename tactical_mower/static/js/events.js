@@ -248,22 +248,17 @@
                 };
                 thumbWrap.appendChild(thumb);
 
-                // Plain-German class label with emoji.
-                // Class info lives in metadata.json, not the index, so we map
-                // by event_type which IS in the index. arrival = generic 🔔.
+                const cls = (event.class_label || '').toLowerCase();
                 const evType = (event.event_type || '').toLowerCase();
-                const emojiMap = {
-                    'persondetect': '🚶', 'person': '🚶',
-                    'firedetect': '🔥', 'fire': '🔥',
-                    'arrival': '🔔',
-                };
+                const emojiMap = { 'person': '🚶', 'fire': '🔥', 'car': '🚗', 'vehicle': '🚗' };
                 const labelMap = {
-                    'persondetect': 'Person', 'person': 'Person',
-                    'firedetect': 'Feuer', 'fire': 'Feuer',
-                    'arrival': 'Ankunft',
+                    'person': 'Person erkannt',
+                    'fire': 'Feuer erkannt',
+                    'car': 'Fahrzeug erkannt',
+                    'vehicle': 'Fahrzeug erkannt',
                 };
-                const emoji = emojiMap[evType] || '🔔';
-                const labelText = labelMap[evType] || (event.event_type || 'Ereignis');
+                const emoji = emojiMap[cls] || emojiMap[evType] || '🔔';
+                const labelText = labelMap[cls] || labelMap[evType] || 'Bewegung erkannt';
 
                 const labelEl = document.createElement('div');
                 labelEl.className = 'event-card-label';
@@ -317,11 +312,31 @@
             document.getElementById('delete-event-btn').style.display = 'block';
             document.getElementById('delete-event-btn').setAttribute('data-event-id', event.event_id);
 
-            document.getElementById('detail-type').textContent = event.event_type || '';
-            document.getElementById('detail-device').textContent = event.device_name || '';
+            const clsDetail = (event.class_label || '').toLowerCase();
+            const detectionLabels = {
+                'person': 'Person erkannt', 'fire': 'Feuer erkannt',
+                'car': 'Fahrzeug erkannt', 'vehicle': 'Fahrzeug erkannt',
+            };
+            document.getElementById('detail-type').textContent =
+                detectionLabels[clsDetail] || detectionLabels[(event.event_type || '').toLowerCase()] || 'Bewegung erkannt';
+
+            const camNames = {
+                'eneo_rgb': 'RGB-Kamera', 'eneo_rgb_cam2': 'RGB-Kamera',
+                'eneo_thermal': 'Wärmebild-Kamera',
+            };
+            const rawCam = event.camera || event.device_name || '';
+            document.getElementById('detail-device').textContent = camNames[rawCam] || rawCam || '—';
+
             document.getElementById('detail-time').textContent = formatDateTimeLocal(event.event_time);
-            document.getElementById('detail-email').textContent = event.email_sent ? 'Ja' : 'Nein';
-            document.getElementById('detail-description').textContent = event.description || '—';
+            document.getElementById('detail-email').textContent = event.email_sent ? 'E-Mail gesendet' : 'Keine E-Mail';
+
+            const what = detectionLabels[clsDetail] || 'Bewegung erkannt';
+            const cam = camNames[rawCam] || 'Kamera';
+            const hasVid = event.video_files && event.video_files.length > 0;
+            const summary = hasVid
+                ? `${what} (${cam}). Video wurde aufgenommen.`
+                : `${what} (${cam}).`;
+            document.getElementById('detail-description').textContent = summary;
 
             const videoList = document.getElementById('video-list');
             videoList.innerHTML = '';
@@ -343,8 +358,12 @@
                 const header = document.createElement('div');
                 header.className = 'video-card-header';
 
+                const vidCamNames = {
+                    'eneo_rgb': 'RGB-Kamera', 'eneo_rgb_cam2': 'RGB-Kamera',
+                    'eneo_thermal': 'Wärmebild-Kamera',
+                };
                 const title = document.createElement('h4');
-                title.textContent = `Kamera: ${vf.camera_id}`;
+                title.textContent = vidCamNames[vf.camera_id] || vf.camera_id;
                 title.style.margin = '0';
                 header.appendChild(title);
 

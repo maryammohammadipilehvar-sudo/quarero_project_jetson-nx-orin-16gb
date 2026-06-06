@@ -83,7 +83,7 @@ class TacticalSchedulerNode(Node):
         # Settings
         self._settings_file = settings_file
         self._settings = {}
-        self._default_battery_threshold = 20
+        self._default_battery_threshold = 5  # TEST OVERRIDE 2026-06-05 (was 20). REVERT after testing.
         self._default_home_tolerance = 0.0
         self._default_auto_charge_return = True
         self._home_position: Optional[Tuple[float, float, float]] = None
@@ -164,7 +164,9 @@ class TacticalSchedulerNode(Node):
         
         # Battery monitoring during charging
         self._target_charge_soc = 80  # Target SoC before resuming schedule
-        self._min_battery_threshold = 20  # Minimum battery threshold for low battery lock
+        self._min_battery_threshold = 5  # TEST OVERRIDE 2026-06-05 (was 20): lowered so the
+        # robot does not auto-return to charge during docking tests. Effective auto-return
+        # threshold = max(raw_threshold, _min_battery_threshold). REVERT to 20 after testing.
         
         # Low battery lock - prevents new missions until battery reaches target SoC
         self._low_battery_lock = False  # Set when battery drops below threshold during mission
@@ -208,7 +210,7 @@ class TacticalSchedulerNode(Node):
                 self.get_logger().error(f"Failed to load settings: {e}")
                 self._settings = {}
         
-        self._default_battery_threshold = self._settings.get('battery_threshold', 20)
+        self._default_battery_threshold = self._settings.get('battery_threshold', 5)  # TEST OVERRIDE (was 20)
         self._default_home_tolerance = self._settings.get('home_tolerance', 0.0)
         self._default_auto_charge_return = self._settings.get('auto_charge_return', True)
         self._max_route_distance = float(self._settings.get('max_route_distance', 3.0))

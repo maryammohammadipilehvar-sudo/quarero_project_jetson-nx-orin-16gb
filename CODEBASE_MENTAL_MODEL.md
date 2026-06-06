@@ -37,7 +37,7 @@ Non-goals today: no fleet manager, no cloud, no SLAM, no auth, no OTA, no person
 | Livox MID-360 LiDAR | Ethernet (host IP `192.168.10.226` hardcoded in MID360_config.json) | grid-occupancy → `/obstacles/lidar` |
 | Intel RealSense D455 | USB 3 | 5×2 sector obstacle detector → `/obstacle_sectors` |
 | OAK-D Lite | USB 3 (named "realsense" in repo — be careful, see HANDOFF.md) | depth, topic `/oak/stereo/image_raw` (`16UC1`, mm) |
-| Fixposition Vision-RTK | TCP `192.168.10.107:21000` | GNSS + IMU fusion, dual-antenna heading |
+| Fixposition Vision-RTK | TCP `192.168.10.109:21000` | GNSS + IMU fusion, dual-antenna heading (was `.107` before the 2026-06-03 router swap) |
 | Eneo IP camera | RTSP `192.168.10.193` + UDP events on `:5002` | RGB + thermal + security events |
 | AXIS F41 | RTSP `192.168.10.174` (creds `root:axis` — AXIS factory default) | optional person-detection on `quarero-00` |
 | Battery | 7S12P 18650, 24 V / 30 Ah / 720 Wh nominal | params in `drive/config/params.yaml` |

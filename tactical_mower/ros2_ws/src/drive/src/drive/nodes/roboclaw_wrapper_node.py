@@ -466,10 +466,14 @@ def main(args=None):
     executor.add_node(wrapper)
     try:
         executor.spin()
+    except KeyboardInterrupt:
+        pass
     finally:
-        executor.shutdown()
-        wrapper.destroy_node()
-        rclpy.shutdown()
+        for _step in (executor.shutdown, wrapper.destroy_node, rclpy.shutdown):
+            try:
+                _step()
+            except Exception:
+                pass  # idempotent — survives signal-handler races
 
 
 if __name__ == "__main__":

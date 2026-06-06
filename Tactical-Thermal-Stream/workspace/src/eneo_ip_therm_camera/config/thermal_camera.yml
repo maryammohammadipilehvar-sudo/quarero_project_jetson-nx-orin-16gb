@@ -1,5 +1,5 @@
 device: AXIS_F41
-ip: 192.168.10.193
+ip: 192.168.10.195
 port: 554
 channel:
   rgb: 2

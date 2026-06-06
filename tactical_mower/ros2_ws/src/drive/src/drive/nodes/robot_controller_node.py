@@ -129,6 +129,9 @@ class RobotControllerNode(Node):
         self.create_subscription(Float32, '/drive/battery_percentage', self._battery_percentage_callback, 10)
         self.create_subscription(Float32, '/drive/runtime_estimate', self._runtime_estimate_callback, 10)
         self.create_subscription(GeoPath, '/geopath', self._geopath_callback, 10)
+        # Mirror actual light commands (web service OR wp_follower auto headlight) into
+        # light_state so /robot/state stays truthful no matter who toggled the light.
+        self.create_subscription(Bool, self.topic_light_control, self._light_state_sync_callback, 10)
         self.create_service(CommandControl, '/control/light', self._light_control_service)
         self.create_service(CommandControl, '/control/alarm', self._alarm_control_service)
         self.create_service(CommandControl, '/control/siren', self._siren_control_service)
@@ -153,6 +156,8 @@ class RobotControllerNode(Node):
         self._last_right_vel = 0.0
         self._last_gamepad_time: float = 0.0  # Track when last gamepad message was received
         self._pending_web_joy: Optional[Joy] = None  # Store pending web joystick command
+        self._last_web_joy_time: float = 0.0  # Track when last web joy message arrived
+        self._web_hold_timeout: float = 0.5  # Keep republishing last web cmd for up to N seconds (dashboard heartbeats at 150ms, this is the safety stop window)
         
         # Button state tracking (single source of truth)
         self._light_state = False
@@ -216,21 +221,39 @@ class RobotControllerNode(Node):
 
     def _joy_web_callback(self, msg: Joy):
         """Handle joystick input from web interface (lower priority).
-        
+
         Args:
             msg: Joystick message from web interface
         """
         # Store web joystick command - will be processed if gamepad is inactive
         self._pending_web_joy = msg
+        self._last_web_joy_time = time()
 
     def _process_web_joy_if_allowed(self):
-        """Process pending web joystick command if gamepad is inactive."""
-        # Only process web input if gamepad hasn't sent a message recently
-        time_since_gamepad = time() - self._last_gamepad_time
-        
-        if self._pending_web_joy is not None and time_since_gamepad > self.gamepad_timeout:
-            self._process_joy_command(self._pending_web_joy, source="web")
-            self._pending_web_joy = None  # Clear after processing
+        """Process pending web joystick command if gamepad is inactive.
+
+        Web sends one-shot POSTs (no continuous stream), but the roboclaw
+        watchdog brakes after ~300ms of silence on /cmd_drive. To keep manual
+        driving smooth we re-publish the last web command at timer rate until
+        either a newer one arrives or _web_hold_timeout has passed.
+        """
+        now = time()
+        time_since_gamepad = now - self._last_gamepad_time
+        if time_since_gamepad <= self.gamepad_timeout:
+            return  # gamepad has priority
+
+        if self._pending_web_joy is None:
+            return
+
+        # Expire the held command if web went silent (button released without
+        # an explicit zero-msg, connection dropped, etc.) — safety net.
+        if (now - self._last_web_joy_time) > self._web_hold_timeout:
+            self._pending_web_joy = None
+            return
+
+        # Re-publish the last web command — robot keeps moving smoothly until
+        # web either updates the command or stops sending.
+        self._process_joy_command(self._pending_web_joy, source="web")
 
     def _process_joy_command(self, msg: Joy, source: str = "unknown"):
         """Process joystick command and publish drive commands.
@@ -265,6 +288,10 @@ class RobotControllerNode(Node):
         self._last_right_vel = right_vel
 
     # Removed _emergency_stop_callback - now handled by service
+
+    def _light_state_sync_callback(self, msg: Bool):
+        """Keep light_state in sync with the actual /control/light command."""
+        self._light_state = bool(msg.data)
 
     def _light_control_service(self, request, response):
         """Handle light control service request.

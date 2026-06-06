@@ -111,6 +111,9 @@ class WaypointFollowerNav2:
         self._deadlock_check_yaw: Optional[float] = None
         self._deadlock_check_time: Optional[float] = None
         self._deadlock_steering_boost: float = 0.0
+        # Spin-guard: abort mission if we rotate in place too long without progress
+        self._rotation_in_place_start_time: Optional[float] = None
+        self._max_rotation_in_place_seconds: float = 15.0
         # Tuning constants - reduced to prevent overshoot at higher speeds
         self._rotation_gain_p = 1.2
         self._rotation_gain_d = 0.15
@@ -198,6 +201,9 @@ class WaypointFollowerNav2:
         self._replan_future = None
         self._replan_start_time = None
         self._last_replan_check_time = None
+        # Reset spin-guard tracking
+        self._is_rotating_in_place = False
+        self._rotation_in_place_start_time = None
     
     def is_active(self) -> bool:
         """Check if mission is active.
@@ -771,6 +777,7 @@ class WaypointFollowerNav2:
                         
                         # Reset rotation in place flag
                         self._is_rotating_in_place = False
+                        self._rotation_in_place_start_time = None
                         # Return zero steering to allow state update; provide default speed
                         return 0.0, True, 100.0
                     else:
@@ -794,6 +801,7 @@ class WaypointFollowerNav2:
                     self._current_sub_wp_idx += 1
                     # Reset rotation in place flag when sub-waypoint reached
                     self._is_rotating_in_place = False
+                    self._rotation_in_place_start_time = None
                     # Continue to next sub-waypoint
                     if self._current_sub_wp_idx < len(self._current_sub_path.poses):
                         # Get next sub-waypoint
@@ -816,14 +824,37 @@ class WaypointFollowerNav2:
                 
                 # If heading error large (>22.5°) rotate on the spot first
                 if abs(heading_error_deg) > 22.5:
-                    # compute rotation steering with deadlock boost and return zero speed
+                    now_ts = time.time()
+                    if not self._is_rotating_in_place:
+                        self._rotation_in_place_start_time = now_ts
+                    elif (self._rotation_in_place_start_time is not None and
+                          (now_ts - self._rotation_in_place_start_time) > self._max_rotation_in_place_seconds):
+                        # Spin-guard: rotated too long without progress. Fail SOFT —
+                        # skip this waypoint (mirrors the linear follower's rotation
+                        # timeout) instead of aborting the route. Calling
+                        # on_route_completed() here would falsely report SUCCESS to the
+                        # scheduler and silently drop the remaining waypoints.
+                        try:
+                            self._node.get_logger().warn(
+                                f"Spin-guard: rotated in place > {self._max_rotation_in_place_seconds:.0f}s "
+                                f"without sub-waypoint progress (heading_error={heading_error_deg:.1f}°). Skipping waypoint."
+                            )
+                        except Exception:
+                            pass
+                        self._is_rotating_in_place = False
+                        self._rotation_in_place_start_time = None
+                        # _advance_to_next_waypoint only signals real completion when
+                        # this was the final ONCE waypoint; LOOP/PING_PONG continue.
+                        self._advance_to_next_waypoint(on_route_completed)
+                        return 0.0, True, 100.0
                     current_yaw_deg = math.degrees(current_heading)
                     steering = self._compute_rotation_steering(heading_error_deg, current_yaw_deg)
                     self._is_rotating_in_place = True
                     return steering, True, 0.0
-                
+
                 # Otherwise compute normal steering and drive at full speed
                 self._is_rotating_in_place = False
+                self._rotation_in_place_start_time = None
                 steering = self.compute_steering(robot_pose_map, current_sub_waypoint_map)
                 return steering, True, 100.0
         
@@ -859,11 +890,12 @@ class WaypointFollowerNav2:
                 
                 # Advance to next waypoint
                 self._advance_to_next_waypoint(on_route_completed)
-                
+
                 # Reset rotation in place flag
                 self._is_rotating_in_place = False
+                self._rotation_in_place_start_time = None
                 return 0.0, True, 100.0
-            
+
             # Compute heading to waypoint and current heading
             current_heading = self._extract_heading(robot_pose_map)
             angle_to_goal = math.atan2(
@@ -872,17 +904,40 @@ class WaypointFollowerNav2:
             )
             heading_error = self._normalize_angle(angle_to_goal - current_heading)
             heading_error_deg = math.degrees(heading_error)
-            
+
             # If heading error large (>22.5°) rotate on the spot first
             if abs(heading_error_deg) > 22.5:
-                # compute rotation steering with deadlock boost and return zero speed
+                now_ts = time.time()
+                if not self._is_rotating_in_place:
+                    self._rotation_in_place_start_time = now_ts
+                elif (self._rotation_in_place_start_time is not None and
+                      (now_ts - self._rotation_in_place_start_time) > self._max_rotation_in_place_seconds):
+                    # Spin-guard: rotated too long without progress. Fail SOFT — skip
+                    # this waypoint (mirrors the linear follower's rotation timeout)
+                    # instead of aborting the route. Calling on_route_completed() here
+                    # would falsely report SUCCESS to the scheduler and silently drop
+                    # the remaining waypoints.
+                    try:
+                        self._node.get_logger().warn(
+                            f"Spin-guard: rotated in place > {self._max_rotation_in_place_seconds:.0f}s "
+                            f"toward goal waypoint (heading_error={heading_error_deg:.1f}°). Skipping waypoint."
+                        )
+                    except Exception:
+                        pass
+                    self._is_rotating_in_place = False
+                    self._rotation_in_place_start_time = None
+                    # _advance_to_next_waypoint only signals real completion when this
+                    # was the final ONCE waypoint; LOOP/PING_PONG continue.
+                    self._advance_to_next_waypoint(on_route_completed)
+                    return 0.0, True, 100.0
                 current_yaw_deg = math.degrees(current_heading)
                 steering = self._compute_rotation_steering(heading_error_deg, current_yaw_deg)
                 self._is_rotating_in_place = True
                 return steering, True, 0.0
-            
+
             # Otherwise compute normal steering and drive at full speed
             self._is_rotating_in_place = False
+            self._rotation_in_place_start_time = None
             steering = self.compute_steering(robot_pose_map, self._current_goal_waypoint_map)
             return steering, True, 100.0
         

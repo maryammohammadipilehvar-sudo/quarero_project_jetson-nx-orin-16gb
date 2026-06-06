@@ -76,6 +76,13 @@ class TacticalWpFollowerNode(Node):
         # Initialize settings-related attributes before loading
         self.max_speed = 1.0
         self._settings_cache = {}
+        # ArUco precision-docking config lives in its own file (separate from
+        # settings.yaml so the web/scheduler writers never touch it). Defaults
+        # keep ArUco docking OFF until an operator enables it + teaches a setpoint.
+        self._aruco_config_file = self._settings_file.parent / 'aruco_dock.yaml'
+        self._aruco_config = {}
+        self._aruco_pose_msg: Optional[PoseStamped] = None
+        self._aruco_pose_rx_time: float = 0.0
         self._home_position: Optional[Tuple[float, float, float]] = None
         self._charge_position: Optional[Tuple[float, float, float]] = None
         self._dock_home_radius = 2.0  # meters
@@ -151,7 +158,7 @@ class TacticalWpFollowerNode(Node):
         # _max_route_distance is already loaded from settings in line 111
         
         # Charge position tolerances
-        self._charge_position_tolerance_charging = 0.05  # 5cm for allowing charging
+        self._charge_position_tolerance_charging = 0.18  # 18cm: matches docking charge_position_tolerance (measured rest residual)
         self._charge_position_tolerance_undocking = 0.4  # 40cm for sending undock command
         
         # Initialize robot state machine with ROS node reference
@@ -289,6 +296,13 @@ class TacticalWpFollowerNode(Node):
         # Publisher for clearing charging request when entering manual mode
         self._charging_requested_pub = self.create_publisher(Bool, '/tactical/control/charging/requested', 10)
 
+        # Auto headlight: ON while heading to / docking at the charge point (so the
+        # ArUco marker is visible at night), OFF once docked (operator request
+        # 2026-06-05). joy_controller forwards /control/light to the ESP relay;
+        # robot_controller mirrors it into /robot/state for the UI.
+        self._light_pub = self.create_publisher(Bool, '/control/light', 10)
+        self._auto_light_on = False  # True only while WE are driving the headlight
+
         # Services
         self.create_service(CommandControl, '/control/autonomous_operation', self._autonomous_operation_service)
         self.create_service(WaypointService, '/control/waypoints', self._waypoint_service)
@@ -331,6 +345,10 @@ class TacticalWpFollowerNode(Node):
         self.create_subscription(Bool, '/obstacle_detected', self._obstacle_callback, 10)
         self.create_subscription(OccupancyGrid, '/obstacles/lidar', self._occupancy_grid_callback, 10)
         self.create_subscription(ObstacleSectors, '/obstacles/sectors', self._obstacle_sectors_callback, 10)
+
+        # ArUco dock-marker pose (from aruco_dock_detector in the camera container).
+        # Consumed by DOCKING only when ArUco docking is enabled; harmless otherwise.
+        self.create_subscription(PoseStamped, '/docking/aruco_pose', self._aruco_pose_callback, 10)
 
         # Control timer
         self._control_timer = None
@@ -395,6 +413,84 @@ class TacticalWpFollowerNode(Node):
         except Exception as e:
             self.get_logger().warn(f"Failed to parse robot state: {e}")
 
+    def _aruco_pose_callback(self, msg: PoseStamped):
+        """Cache the latest dock-marker pose + receipt time (camera optical frame)."""
+        self._aruco_pose_msg = msg
+        self._aruco_pose_rx_time = time()
+
+    def _load_aruco_config(self):
+        """Load ArUco precision-docking config from aruco_dock.yaml (if present).
+
+        Read-only here; the only writer is the teach tool. Absent/invalid file
+        leaves _aruco_config empty → docking stays on the GPS line-follow.
+        """
+        cfg = {}
+        try:
+            if self._aruco_config_file.exists():
+                with open(self._aruco_config_file, 'r') as f:
+                    cfg = yaml.safe_load(f) or {}
+        except Exception as e:
+            self.get_logger().warn(f"Failed to load aruco_dock config: {e}")
+            cfg = {}
+        self._aruco_config = cfg if isinstance(cfg, dict) else {}
+
+    @staticmethod
+    def _marker_bearing_from_quat(q) -> float:
+        """Yaw of the marker's surface normal in the camera XZ plane (rad).
+
+        The marker's +z axis is its outward normal; its direction in camera
+        coordinates is the third column of the rotation matrix. The horizontal
+        angle of that normal (atan2(normal_x, normal_z)) tells us how square-on
+        we are to the marker — 0 = head-on.
+        """
+        normal_x = 2.0 * (q.x * q.z + q.w * q.y)
+        normal_z = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
+        return math.atan2(normal_x, normal_z)
+
+    @staticmethod
+    def _marker_dock_errors(pose) -> Tuple[float, float, float]:
+        """Robot pose in the DOCK frame, from the marker pose (camera optical frame).
+
+        This is what makes the dock 'normal-aligned' instead of just 'pointing at the
+        marker': we invert the marker pose to get the camera's pose relative to the
+        marker plane, giving the three errors a unicycle docking controller needs:
+          - cross_track: how far the robot is to the side of the dock centre-line (m),
+                         (+) = robot is to one side; sign verified on the bench.
+          - range_perp:  perpendicular distance from the robot to the marker plane (m).
+          - heading_err: robot heading vs the dock normal (rad); 0 = approaching head-on.
+        Camera-in-marker = -R^T · p; heading from the camera +z axis expressed in the
+        marker frame. Works for one marker (its own normal) or, later, a fused two-marker
+        pose (a far more accurate normal) with no controller change.
+        """
+        q = pose.orientation
+        p = pose.position
+        x, y, z, w = q.x, q.y, q.z, q.w
+        # Rotation matrix (marker -> camera).
+        r00 = 1.0 - 2.0 * (y * y + z * z)
+        r01 = 2.0 * (x * y - z * w)
+        r02 = 2.0 * (x * z + y * w)
+        r10 = 2.0 * (x * y + z * w)
+        r11 = 1.0 - 2.0 * (x * x + z * z)
+        r12 = 2.0 * (y * z - x * w)
+        r20 = 2.0 * (x * z - y * w)
+        r21 = 2.0 * (y * z + x * w)
+        r22 = 1.0 - 2.0 * (x * x + y * y)
+        px, py, pz = p.x, p.y, p.z
+        # Camera position in marker frame = -R^T · p.
+        cam_x = -(r00 * px + r10 * py + r20 * pz)
+        cam_z = -(r02 * px + r12 * py + r22 * pz)
+        cross_track = cam_x
+        range_perp = abs(cam_z)
+        # Camera forward (0,0,1) expressed in marker frame = (r20, r21, r22). Head-on the
+        # camera looks anti-parallel to the marker +z, so the raw angle is ~pi; subtract
+        # it so heading_err is ~0 when square-on.
+        heading_err = math.atan2(r20, r22) - math.pi
+        while heading_err > math.pi:
+            heading_err -= 2.0 * math.pi
+        while heading_err < -math.pi:
+            heading_err += 2.0 * math.pi
+        return cross_track, range_perp, heading_err
+
     def _load_settings(self):
         """Load settings (home point, charge point, speed factor, waypoint tolerance)."""
         settings_file = self._settings_file
@@ -406,7 +502,10 @@ class TacticalWpFollowerNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Failed to load settings: {e}")
         self._settings_cache = settings
-        
+
+        # Refresh ArUco docking config from its own file (off if absent/invalid).
+        self._load_aruco_config()
+
         new_speed = settings.get('speed_factor')
         if new_speed is not None and new_speed != self.max_speed:
             self.max_speed = new_speed
@@ -1644,6 +1743,24 @@ class TacticalWpFollowerNode(Node):
             # Transition to IDLE on failure
             self._robot_state_machine.transition_to(RobotState.IDLE, context)
 
+    def _update_auto_headlight(self, current_state: RobotState):
+        """Turn the headlight ON while heading to / docking at the charge point, OFF
+        once that flow ends (docked, or aborted to ERROR/MANUAL).
+
+        Edge-triggered and self-scoped: we only ever turn the light OFF if WE turned
+        it ON, so manual light control in other states is never overridden.
+        """
+        going_to_charge = current_state in (
+            RobotState.RETURNING_TO_HOME, RobotState.DOCKING)
+        if going_to_charge and not self._auto_light_on:
+            self._light_pub.publish(Bool(data=True))
+            self._auto_light_on = True
+            self.get_logger().info("Auto headlight ON (heading to charge / docking)")
+        elif not going_to_charge and self._auto_light_on:
+            self._light_pub.publish(Bool(data=False))
+            self._auto_light_on = False
+            self.get_logger().info("Auto headlight OFF (docked / left charge approach)")
+
     def _publish_charging_status(self, state: str, message: str, debug_info: dict = None):
         """Publish charging status with optional debug information.
         
@@ -2034,7 +2151,14 @@ class TacticalWpFollowerNode(Node):
             if current_robot_state in [RobotState.DOCKED, RobotState.CHARGING]:
                 # Clear the flag now that we're in a stable docked/charging state
                 self._startup_at_charge_pos = False
-            return True
+            elif current_robot_state in [RobotState.UNDOCKING, RobotState.UNDOCKED]:
+                # Robot is actively leaving the dock: the startup latch must not keep
+                # asserting "at charge" or it deadlocks the undock transition
+                # (RCA 2026-06-05). Drop the latch and fall through to the real
+                # GPS-distance check below.
+                self._startup_at_charge_pos = False
+            else:
+                return True
         
         # Get current state for decision making
         current_state = self._robot_state_machine.get_state() if hasattr(self, '_robot_state_machine') else None
@@ -2245,9 +2369,29 @@ class TacticalWpFollowerNode(Node):
         # Add obstacle avoidance controller and obstacle data
         kwargs['obstacle_avoidance'] = self._obstacle_avoidance if self._enable_obstacle_avoidance else None
         kwargs['obstacle_sectors'] = self._obstacle_sectors_msg  # Sector analysis from detection
-        
+
+        # ArUco precision-docking: pass the config (off by default) + the latest
+        # marker pose reduced to (lateral, range, bearing, age). DockingState only
+        # acts on these when aruco_dock.yaml enables it and a setpoint is taught.
+        kwargs['aruco_config'] = self._aruco_config
+        aruco_marker = None
+        if self._aruco_pose_msg is not None:
+            age = time() - self._aruco_pose_rx_time
+            p = self._aruco_pose_msg.pose
+            cross, range_perp, heading_err = self._marker_dock_errors(p)
+            aruco_marker = (
+                p.position.x,                                   # lateral x in camera frame (m)
+                p.position.z,                                   # straight range in camera frame (m)
+                self._marker_bearing_from_quat(p.orientation),  # marker-normal bearing (rad)
+                age,                                            # seconds since received
+                cross,                                          # cross-track: robot offset from dock axis (m)
+                range_perp,                                     # perpendicular range to marker plane (m)
+                heading_err,                                    # robot heading vs dock normal (rad), 0 = head-on
+            )
+        kwargs['aruco_marker'] = aruco_marker
+
         # Callbacks will be added at call site as needed
-        
+
         return kwargs
     
     def _publish_robot_state(self, state: RobotState, context: RobotStateContext):
@@ -2356,10 +2500,13 @@ class TacticalWpFollowerNode(Node):
                 self._robot_state_machine.transition_to(next_state, context)
         
         current_state = self._robot_state_machine.get_state()
-        
+
         # Explicit transitions have been removed - state machine's determine_next_state()
         # handles all automatic transitions. State entry callbacks handle setup.
-        
+
+        # Headlight for night docking: ON heading to/docking at charge, OFF when docked.
+        self._update_auto_headlight(current_state)
+
         # Publish current robot state
         self._publish_robot_state(current_state, context)
         
@@ -2654,20 +2801,61 @@ class TacticalWpFollowerNode(Node):
                 context.is_at_charge_pos = True
                 self.get_logger().info("on_docked callback: transitioning to DOCKED state")
                 self._robot_state_machine.transition_to(RobotState.DOCKED, context)
-            
+
+            def on_dock_failed(reason):
+                # Docking could not land on the charge point within tolerance.
+                # There is no contact sensor, so we must NOT declare "docked" off
+                # target: we stay in DOCKING (stopped), keep autonomy enabled, and
+                # surface the failure to the operator. No transition to DOCKED.
+                self._publish_charging_status(
+                    "blocked",
+                    f"Andocken nicht möglich ({reason}) — bitte Position prüfen und erneut starten."
+                )
+                self.get_logger().error(f"Docking failed (not docked): {reason}")
+                if self._waypoint_follower.is_active():
+                    self._waypoint_follower.stop()
+
             def on_undocked():
                 self._publish_charging_status("completed", "Undocking complete")
-                # Transition to UNDOCKED state
+                # Transition to UNDOCKED. The controller only calls this after
+                # confirming the dock is clear, so the transition is expected to pass.
+                # If it is somehow still rejected, fail safe rather than loop silently.
                 context = self._create_state_context()
-                self._robot_state_machine.transition_to(RobotState.UNDOCKED, context)
-            
+                if not self._robot_state_machine.transition_to(RobotState.UNDOCKED, context):
+                    self.get_logger().error(
+                        "on_undocked: UNDOCKED transition rejected despite cleared dock "
+                        f"(at_charge={context.is_at_charge_pos}) - forcing ERROR"
+                    )
+                    self._publish_drive_command(0, 0)
+                    if self._waypoint_follower.is_active():
+                        self._waypoint_follower.stop()
+                    self._robot_state_machine.set_error()
+
+            def on_undock_failed(reason):
+                # Undocking could not clear the dock (off-target finish, or timeout).
+                # With no contact sensor we must not pretend the robot is free: stop,
+                # tell the operator, and drop to ERROR (operator-recoverable, exits only
+                # to IDLE/MANUAL). This is the fail-safe that replaces the silent
+                # "stuck in UNDOCKING commanding zero" freeze (RCA 2026-06-05).
+                self._publish_charging_status(
+                    "error",
+                    f"Abdocken fehlgeschlagen ({reason}) — bitte Position prüfen und manuell freifahren."
+                )
+                self.get_logger().error(f"Undocking failed (not undocked): {reason}")
+                self._publish_drive_command(0, 0)
+                if self._waypoint_follower.is_active():
+                    self._waypoint_follower.stop()
+                self._robot_state_machine.set_error()
+
             # Only add callbacks for DOCKING state
             if current_state == RobotState.DOCKING:
                 kwargs['on_home_reached'] = on_home_reached
                 kwargs['on_aligned'] = on_aligned
                 kwargs['on_docked'] = on_docked
+                kwargs['on_dock_failed'] = on_dock_failed
             elif current_state == RobotState.UNDOCKING:
                 kwargs['on_undocked'] = on_undocked
+                kwargs['on_undock_failed'] = on_undock_failed
             
             # Call state machine update - it will delegate to the current state's on_update()
             commands = self._robot_state_machine.update(context, **kwargs)

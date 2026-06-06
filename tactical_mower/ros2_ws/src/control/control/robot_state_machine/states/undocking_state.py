@@ -29,10 +29,18 @@ class UndockingConfig:
     
     # Speed settings
     max_speed: float = 1.0
-    undock_speed_ratio: float = 0.4  # 40% of max_speed for undocking (backwards)
+    undock_speed_ratio: float = 0.5  # raised from 0.4 for grass traction at low battery
     
     # Undocking settings
     home_position_tolerance: float = 0.30  # Tolerance for reaching home position (30cm - robot drives closer to home)
+
+    # Completion + fail-safe (RCA 2026-06-05). Undocking succeeds once the robot has
+    # CLEARED the charge dock, not once it reaches home — a reverse drive that ends
+    # off-line is still a valid undock if the contacts are clear, and the waypoint
+    # follower drives to WP0 from wherever the robot ends up. undock_timeout bounds
+    # the state so it can never hang silently commanding zero (the original deadlock).
+    undock_clearance_distance: float = 0.5  # m from charge proving the robot left the dock
+    undock_timeout: float = 30.0            # s; abort + notify operator if not cleared in time
     
     # Steering settings
     max_steering: float = 100.0
@@ -97,7 +105,12 @@ class UndockingState(BaseState):
         
         # Undocking state flag
         self._undocking_started: bool = False
-    
+
+        # Fail-safe bookkeeping (RCA 2026-06-05): monotonic time of state entry for
+        # the undock timeout, and a latch so the failure callback fires at most once.
+        self._undock_start_time: Optional[float] = None
+        self._undock_failed_fired: bool = False
+
     def can_enter(self, context: RobotStateContext) -> bool:
         """Check if UNDOCKING can be entered.
         
@@ -148,15 +161,20 @@ class UndockingState(BaseState):
         if target_state == RobotState.ERROR:
             return True
         
-        # UNDOCKED: When at (or near) home position
-        # Using is_near_home_pos (60cm) allows completion even with GPS drift
+        # UNDOCKED: allowed once the robot has physically cleared the charge dock.
+        # Undocking's goal is to leave the contacts so the route can start — not to
+        # land precisely on home. Gating on "near home" deadlocked the machine when
+        # the reverse drive ended off-line (RCA 2026-06-05): the controller declared
+        # complete but this veto rejected the transition forever. Completion is now
+        # decided authoritatively by the controller (_execute_undocking), which only
+        # fires on_undocked after confirming clearance; this is the safety net.
         if target_state == RobotState.UNDOCKED:
-            if not context.is_at_home_pos and not context.is_near_home_pos:
+            if context.is_at_charge_pos:
                 self._logger.info(
-                    "UNDOCKING cannot transition to UNDOCKED: not at or near home position"
+                    "UNDOCKING cannot transition to UNDOCKED: still at charge position"
                 )
                 return False
-            
+
             return True
         
         # Unknown target state
@@ -175,11 +193,11 @@ class UndockingState(BaseState):
             Set of valid target states
         """
         valid = {RobotState.MANUAL, RobotState.ERROR}
-        
-        # Can transition to UNDOCKED when at (or near) home position
-        if context.is_at_home_pos or context.is_near_home_pos:
+
+        # Can transition to UNDOCKED once the robot has cleared the charge dock.
+        if not context.is_at_charge_pos:
             valid.add(RobotState.UNDOCKED)
-        
+
         return valid
     
     def determine_next_state(self, context: RobotStateContext) -> Optional[RobotState]:
@@ -221,7 +239,9 @@ class UndockingState(BaseState):
         self._last_lateral_error = None
         self._last_heading_error = None
         self._last_update_time = None
-    
+        self._undock_start_time = time.monotonic()
+        self._undock_failed_fired = False
+
     def on_exit(self, next_state: RobotState, context: RobotStateContext):
         """Called when exiting UNDOCKING state.
         
@@ -238,6 +258,8 @@ class UndockingState(BaseState):
         self._charge_point_enu = None
         self._line_direction_rad = None
         self._path_points.clear()
+        self._undock_start_time = None
+        self._undock_failed_fired = False
     
     def on_update(
         self, 
@@ -279,18 +301,38 @@ class UndockingState(BaseState):
         # Compensate GPS offset to get rotation center
         robot_x, robot_y = self._compensate_gps_offset(raw_x, raw_y, heading)
         
+        on_undock_failed = kwargs.get('on_undock_failed')
+
         # Start undocking if not already started
         if not self._undocking_started:
             self._logger.info("UNDOCKING: Attempting to start undocking procedure...")
             if not self._start_undocking(kwargs):
-                self._logger.error("UNDOCKING: Failed to start undocking procedure - robot will remain stopped")
+                self._logger.error("UNDOCKING: Failed to start undocking procedure - aborting")
+                self._fail_undock(on_undock_failed, "Start fehlgeschlagen")
                 return 0.0, 0.0
-        
+
         # Execute undocking
         on_undocked = kwargs.get('on_undocked')
-        steering, speed = self._execute_undocking(robot_x, robot_y, heading, on_undocked)
-        
+        steering, speed = self._execute_undocking(robot_x, robot_y, heading, on_undocked, on_undock_failed)
+
         return steering, speed
+
+    def _fail_undock(
+        self,
+        on_undock_failed: Optional[Callable[[str], None]],
+        reason: str
+    ) -> None:
+        """Fire the undock-failure callback exactly once for this state visit.
+
+        Routes to a safe terminal (operator notice + ERROR) in the node. Latched so
+        a per-loop failure condition cannot spam the callback before the state flips.
+        """
+        if self._undock_failed_fired:
+            return
+        self._undock_failed_fired = True
+        self._logger.error(f"UNDOCKING aborting: {reason}")
+        if on_undock_failed is not None:
+            on_undock_failed(reason)
     
     def _start_undocking(self, kwargs: dict) -> bool:
         """Start undocking procedure.
@@ -465,7 +507,8 @@ class UndockingState(BaseState):
         robot_x: float,
         robot_y: float,
         heading: float,
-        on_complete: Optional[Callable[[], None]]
+        on_complete: Optional[Callable[[], None]],
+        on_fail: Optional[Callable[[str], None]] = None
     ) -> Tuple[float, float]:
         """Execute undocking: move backwards along the line from charge to home.
         
@@ -491,11 +534,27 @@ class UndockingState(BaseState):
         if not self._path_points:
             self._logger.error("UNDOCKING: Path not discretized")
             return 0.0, 0.0
-        
+
+        # Fail-safe (RCA 2026-06-05): never hang in UNDOCKING. If we cannot reach a
+        # terminal outcome within the timeout, abort to a safe state + notify operator.
+        if self._undock_start_time is not None:
+            elapsed = time.monotonic() - self._undock_start_time
+            if elapsed > self._config.undock_timeout:
+                self._fail_undock(on_fail, f"Zeitueberschreitung ({elapsed:.0f}s)")
+                return 0.0, 0.0
+
         # Calculate distance to home (for zone detection and completion check)
         dx_to_home = robot_x - self._home_position_enu[0]
         dy_to_home = robot_y - self._home_position_enu[1]
         distance_to_home = math.sqrt(dx_to_home * dx_to_home + dy_to_home * dy_to_home)
+
+        # Distance to the charge dock — the authoritative completion criterion: undock
+        # is "done" only once the robot has cleared the contacts by a safe margin,
+        # regardless of how close it got to home (handles off-line reverse drives).
+        dx_to_charge = robot_x - self._charge_point_enu[0]
+        dy_to_charge = robot_y - self._charge_point_enu[1]
+        distance_to_charge = math.sqrt(dx_to_charge * dx_to_charge + dy_to_charge * dy_to_charge)
+        cleared_dock = distance_to_charge >= self._config.undock_clearance_distance
         
         # Calculate distance along line from charge to robot (projection)
         dx_line = self._home_position_enu[0] - self._charge_point_enu[0]
@@ -527,27 +586,32 @@ class UndockingState(BaseState):
         has_passed_home = distance_along_line >= line_length
         is_close_to_home = distance_to_home <= self._config.home_position_tolerance
         
-        # Hard overshoot stop: if we're past home by a small margin, stop immediately
-        # This prevents runaway if home detection fails due to pose/TF noise.
+        # Hard overshoot guard: past home by a small margin → stop now (prevents
+        # runaway if home detection drifts due to pose/TF noise).
         overshoot_margin = 0.05  # 5cm safety margin, not a home tolerance change
-        if distance_along_line > (line_length + overshoot_margin):
-            if on_complete:
-                on_complete()
-            self._logger.warning(
-                "Undocking overshoot detected - stopping immediately "
-                f"(distance_to_home={distance_to_home:.2f}m, distance_along_line={distance_along_line:.2f}m, "
-                f"line_length={line_length:.2f}m)"
-            )
-            return 0.0, 0.0
-        
-        if has_passed_home or is_close_to_home:
-            if on_complete:
-                on_complete()
-            self._logger.info(
-                f"Undocking complete - reached home position "
-                f"(distance_to_home={distance_to_home:.2f}m, distance_along_line={distance_along_line:.2f}m, "
-                f"line_length={line_length:.2f}m)"
-            )
+        overshot = distance_along_line > (line_length + overshoot_margin)
+
+        # The controller is the single authority on completion. Once it has finished
+        # driving (reached home, passed home along the line, or overshot), the OUTCOME
+        # is decided by whether the dock is actually clear — NOT by proximity to home.
+        # An off-line reverse drive that ends >clearance from the contacts is a valid
+        # undock; one that "finished" still on the contacts is a failure, not a dock.
+        if overshot or has_passed_home or is_close_to_home:
+            # Success if we cleared the dock OR genuinely reached the configured home
+            # point (covers short undock lines where home sits inside the clearance).
+            if cleared_dock or is_close_to_home:
+                if on_complete:
+                    on_complete()
+                self._logger.info(
+                    f"Undocking complete - dock cleared "
+                    f"(to_charge={distance_to_charge:.2f}m, to_home={distance_to_home:.2f}m, "
+                    f"along_line={distance_along_line:.2f}/{line_length:.2f}m, overshot={overshot})"
+                )
+            else:
+                self._fail_undock(
+                    on_fail,
+                    f"Dock nicht verlassen (Abstand {distance_to_charge:.2f}m)"
+                )
             return 0.0, 0.0
         
         # Find closest point on discretized path (for robust tracking)

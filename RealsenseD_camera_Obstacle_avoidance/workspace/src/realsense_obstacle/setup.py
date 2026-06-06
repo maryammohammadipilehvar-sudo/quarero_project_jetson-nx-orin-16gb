@@ -29,7 +29,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'simple_obstacle_detector = realsense_obstacle.simple_obstacle_detector:main'
+            'simple_obstacle_detector = realsense_obstacle.simple_obstacle_detector:main',
+            'aruco_dock_detector = realsense_obstacle.aruco_dock_detector:main',
         ],
     },
 )

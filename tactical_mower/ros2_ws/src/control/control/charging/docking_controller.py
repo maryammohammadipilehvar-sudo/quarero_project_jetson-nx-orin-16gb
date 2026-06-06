@@ -44,9 +44,9 @@ class DockingConfig:
     
     # Speed settings
     max_speed: float = 1.0
-    docking_speed_ratio: float = 0.3  # 30% of max_speed — used in critical/final zone
-    docking_approach_speed_ratio: float = 0.5  # 50% of max_speed — used before critical zone (grass traction)
-    undock_speed_ratio: float = 0.4    # 40% of max_speed for undocking (backwards) - increased to overcome friction/resistance
+    docking_speed_ratio: float = 0.5  # 50% of max_speed — used in critical/final zone (raised from 0.3 for grass traction at low battery)
+    docking_approach_speed_ratio: float = 0.7  # 70% of max_speed — used before critical zone (raised from 0.5)
+    undock_speed_ratio: float = 0.5    # 50% of max_speed for undocking (backwards) - raised from 0.4
     
     # Undocking settings
     home_position_tolerance: float = 0.40  # Tolerance for reaching home position during undocking (40cm)

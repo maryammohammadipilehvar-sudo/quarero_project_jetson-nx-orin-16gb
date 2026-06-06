@@ -50,8 +50,21 @@ def generate_launch_description():
         output='screen',
     )
 
+    # ArUco dock-marker detector. Purely additive: subscribes to the OAK RGB
+    # + camera_info and publishes /docking/aruco_pose. The docking controller
+    # only consumes it when ArUco docking is explicitly enabled; if this node
+    # never sees the marker, docking is unaffected.
+    aruco_dock_node = Node(
+        package='realsense_obstacle',
+        executable='aruco_dock_detector',
+        name='aruco_dock_detector',
+        output='screen',
+        parameters=[obstacle_params],
+    )
+
     return LaunchDescription([
         oak,
         obstacle_node,
         rgb_relay,
+        aruco_dock_node,
     ])

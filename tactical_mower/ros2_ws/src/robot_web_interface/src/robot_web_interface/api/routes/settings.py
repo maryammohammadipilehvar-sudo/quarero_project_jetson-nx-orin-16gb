@@ -2,8 +2,7 @@
 from fastapi import APIRouter
 from ...services.settings_service import (
     get_settings, save_settings_data, get_home_position, save_home_position,
-    delete_all_schedules, delete_all_routes, reset_home_and_charge_point,
-    save_aruco_standoff,
+    delete_all_schedules, delete_all_routes, reset_home_and_charge_point
 )
 from ...ros_interface.robot_node import RobotNode
 from ...services.route_service import get_routes
@@ -45,19 +44,7 @@ async def save_home_position_endpoint(position_data: dict):
         
         current_pos = ros_node.get_position()
         fusion_state = ros_node.get_fusion_state()
-
-        # Dock-setup robustness: if both markers are seen (fused), square the GPS line to
-        # the markers by using the MARKER-NORMAL heading instead of the robot's raw yaw
-        # (robot_yaw - heading_err). This removes the "must be perfectly square at save"
-        # fragility. Also remember the measured standoff to write into aruco_dock.yaml.
-        dock = ros_node.get_dock_align()
-        dock_perp = None
-        if dock.get("fused"):
-            raw_yaw = current_pos.get("yaw")
-            if raw_yaw is not None and dock.get("heading_deg") is not None:
-                position_data["yaw_override"] = float(raw_yaw) - float(dock["heading_deg"])
-            dock_perp = dock.get("perp_m")
-
+        
         deleted_schedules = 0
         deleted_routes = 0
         
@@ -78,17 +65,12 @@ async def save_home_position_endpoint(position_data: dict):
         )
         
         if success:
-            standoff_written = False
-            if dock_perp is not None:
-                standoff_written = save_aruco_standoff(dock_perp)
             return {
                 "status": "success",
                 "charge_point": result_data["charge_point"],
                 "home_point": result_data["home_point"],
                 "deleted_schedules": deleted_schedules,
-                "deleted_routes": deleted_routes,
-                "marker_squared": bool(dock.get("fused")),
-                "standoff_m": dock_perp if standoff_written else None,
+                "deleted_routes": deleted_routes
             }
         else:
             return {"status": "error", "message": message}

@@ -98,7 +98,7 @@ class JoyController(Node):
         # last held, publish one zero Joy so robot_controller stops trusting
         # the last gamepad value. After firing we disarm; robot_controller's
         # gamepad_timeout (0.5 s) then takes over and falls back to /joy_web.
-        self._FRAME_SILENCE_S = 0.15
+        self._FRAME_SILENCE_S = 0.5  # patched: was 0.15, ESP gaps under load
         self._last_frame_time = None       # monotonic; None until first parsed line
         self._silence_watchdog_fired = False
         self.create_timer(0.05, self._silence_watchdog_check)

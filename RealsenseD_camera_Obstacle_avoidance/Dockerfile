@@ -18,19 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ros-${ROS_DISTRO}-rqt-image-view \
     htop \
-    python3-pip \
  && rm -rf /var/lib/apt/lists/*
-
-# ArUco lives in opencv_contrib. Ubuntu 24.04 / ROS Jazzy ships OpenCV 4.6 via
-# apt where the apt python3-opencv omits the contrib aruco module, so install
-# the contrib wheel (headless = no GUI libs; nodes only publish images, never
-# imshow). Needed by realsense_obstacle/aruco_dock_detector.py (cv2.aruco).
-#
-# Pin 4.10.0.84 (last line that supports numpy 1.x) and --no-deps so the image's
-# Debian numpy 1.26 — which ros-jazzy cv_bridge is compiled against — is left
-# untouched. Newer wheels force numpy>=2 and break that ABI.
-RUN pip3 install --no-cache-dir --break-system-packages --no-deps \
-    opencv-contrib-python-headless==4.10.0.84
 
  
 WORKDIR /workspace

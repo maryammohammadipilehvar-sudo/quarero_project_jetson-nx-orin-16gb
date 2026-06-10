@@ -1,10 +1,7 @@
 """Settings service for loading and saving settings"""
 import yaml
 from typing import Dict, Any, Optional
-from ..utils.file_manager import (
-    load_settings, save_settings, SCHEDULES_FILE, ROUTES_DIR,
-    load_aruco_dock, save_aruco_dock,
-)
+from ..utils.file_manager import load_settings, save_settings, SCHEDULES_FILE, ROUTES_DIR
 from .geo_calculator import calculate_home_point_from_charge
 
 
@@ -49,12 +46,7 @@ def save_home_position(position_data: Dict, current_position: Dict, fusion_state
         if fusion_status not in (2, 3, 4):
             return False, f"Fusion-Status nicht stabil (Status={fusion_status}). Position kann nur bei grünem Fusion-Status gespeichert werden.", None
         
-        # Prefer the marker-corrected yaw (the dock normal) when the dock-setup tool
-        # supplies it — that makes the GPS line square to the markers even if the robot
-        # isn't perfectly square at save time. Fall back to the robot's heading otherwise.
-        yaw = position_data.get("yaw_override")
-        if yaw is None:
-            yaw = current_position.get("yaw")
+        yaw = current_position.get("yaw")
 
         if yaw is None:
             return False, "Kein Yaw-Wert verfügbar", None
@@ -90,22 +82,6 @@ def save_home_position(position_data: Dict, current_position: Dict, fusion_state
         }
     except Exception as e:
         return False, str(e), None
-
-
-def save_aruco_standoff(perp_m: float, floor_margin_m: float = 0.10) -> bool:
-    """Write the measured docked standoff into aruco_dock.yaml.
-
-    stop_range_m = perp at the docked position; min_range_m = stop - margin (anti-wall
-    floor). Preserves all other keys (gains, enabled, etc.).
-    """
-    try:
-        cfg = load_aruco_dock()
-        cfg["stop_range_m"] = round(float(perp_m), 3)
-        cfg["min_range_m"] = round(float(perp_m) - float(floor_margin_m), 3)
-        save_aruco_dock(cfg)
-        return True
-    except Exception:
-        return False
 
 
 def delete_all_schedules() -> int:

@@ -9,7 +9,7 @@ from sensor_msgs.msg import Image, NavSatFix
 from nav_msgs.msg import Odometry
 from fixposition_driver_msgs.msg import FusionEpoch
 from std_msgs.msg import String, Bool, Float32
-from geometry_msgs.msg import Point, PoseStamped
+from geometry_msgs.msg import Point
 from interfaces.msg import GeoPath, Joy, Schedule, SecurityAlert
 from interfaces.srv import CommandControl, WaypointService, ScheduleService
 
@@ -166,14 +166,6 @@ class RobotNode(Node):
             10
         )
         self.get_logger().info(f'Subscribed to robot state topic: {robot_state_topic}')
-
-        # ArUco dock marker (fused two-marker pose) for the in-app dock setup tool.
-        self.dock_marker_sub = self.create_subscription(
-            PoseStamped,
-            '/docking/aruco_pose',
-            self._dock_marker_callback,
-            10
-        )
 
         # Schedule ACK subscriber
         self.robot_ack_sub = self.create_subscription(
@@ -438,28 +430,6 @@ class RobotNode(Node):
 
     def get_fusion_state(self) -> Dict[str, Any]:
         return self.status_manager.get_fusion_state()
-
-    def _dock_marker_callback(self, msg: PoseStamped) -> None:
-        """Cache the latest fused dock-marker pose for the dock-setup tool."""
-        self.status_manager.dock_marker_pose = msg.pose
-        self.status_manager.dock_marker_time = time.time()
-
-    def get_dock_align(self) -> Dict[str, Any]:
-        """Live dock alignment (cross/heading/perp + aligned) for the UI.
-
-        Green-light tolerances come from aruco_dock.yaml (live-tunable, no rebuild)."""
-        from ..services.dock_align import compute_align
-        from ..utils.file_manager import load_aruco_dock
-        pose = self.status_manager.dock_marker_pose
-        t = self.status_manager.dock_marker_time
-        age = (time.time() - t) if t else None
-        try:
-            cfg = load_aruco_dock()
-            cross_tol = float(cfg.get("setup_cross_tol_cm", 6.0)) / 100.0
-            head_tol = float(cfg.get("setup_heading_tol_deg", 10.0))
-        except Exception:
-            cross_tol, head_tol = 0.06, 10.0
-        return compute_align(pose, age, cross_tol_m=cross_tol, head_tol_deg=head_tol)
 
     def publish_waypoints(self, waypoints, loop_mode: bool = False, command_id: str = None, route_name: str = '') -> None:
         self._publisher_methods.publish_waypoints(waypoints, loop_mode, command_id, route_name)

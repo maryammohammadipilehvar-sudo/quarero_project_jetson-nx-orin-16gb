@@ -5,12 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard – Robotersteuerung</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="/static/css/common.css?v=__APP_VERSION__" />
-    <link rel="stylesheet" href="/static/css/index.css?v=__APP_VERSION__" />
+    <link rel="stylesheet" href="/static/css/common.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/index.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_dash-v2.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_v2_polish.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_v2_estop_fix.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_estop.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_all-pages-polish.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/v2_round_buttons.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_map_fullscreen_pro.css?v=v2-r24-clean" />
+    <link rel="stylesheet" href="/static/css/tm_map_controls_apple.css?v=v2-r27-listpop" />
+    <link rel="stylesheet" href="/static/css/tm_apple_pro.css?v=v2-r22-applepro" />
+    <link rel="stylesheet" href="/static/css/tm_apple_responsive.css?v=v2-r31-logoleft" />
 </head>
 <body>
     <div class="navbar">
-        <!-- Links Navigation -->
         <div class="nav-links">
             <a href="/" class="nav-link active"><span class="nav-text">Dashboard</span></a>
             <a href="/control" class="nav-link"><span class="nav-text">Manuelle<br>Steuerung</span></a>
@@ -19,90 +28,35 @@
             <a href="/settings" class="nav-link"><span class="nav-text">Einstellungen</span></a>
         </div>
 
-        <!-- Status Badges -->
        <div class="nav-status-group">
-            <div id="badge-gnss1" class="status-badge">
-                <span class="badge-label">GNSS1</span>
-            </div>
-            <div id="badge-gnss2" class="status-badge">
-                <span class="badge-label">GNSS2</span>
-            </div>
-            <div id="badge-imu" class="status-badge">
-                <span class="badge-label">IMU</span>
-            </div>
-            <div id="badge-fusion" class="status-badge status-badge-fusion">
-                <span class="badge-label">Fusion</span>
-            </div>
+            <div id="badge-gnss1" class="status-badge"><span class="badge-label">GNSS1</span></div>
+            <div id="badge-gnss2" class="status-badge"><span class="badge-label">GNSS2</span></div>
+            <div id="badge-imu" class="status-badge"><span class="badge-label">IMU</span></div>
+            <div id="badge-fusion" class="status-badge status-badge-fusion"><span class="badge-label">Fusion</span></div>
         </div>
-        <!-- Connection Status Indicator -->
         <div id="robot-connection-status" class="robot-connection-status" style="display: none;">
             <span class="connection-text">Keine Verbindung zum Roboter</span>
         </div>
-        <!-- Logo rechts -->
         <div class="navbar-right">
             <img src="/static/media/logo.svg" alt="Quarero">
         </div>
     </div>
 
+    <main class="dashboard dashboard-v2">
 
-    <div class="container">
-        <!-- UI sprint #1: big status card at top of dashboard.
-             Answers "what is the robot doing right now?" in one glance.
-             See PLAN_UI_CUSTOMER_HANDOFF.md §7 item #1.
-             Updated by updateMainStatusPanel() in index.js. -->
-        <div class="panel main-status-panel" id="main-status-panel">
-            <div class="main-status-top">
-                <div class="main-status-icon" id="main-status-icon" aria-hidden="true">⏳</div>
-                <div class="main-status-text">
-                    <div class="main-status-headline" id="main-status-headline">Roboter startet — bitte warten</div>
-                    <div class="main-status-detail" id="main-status-detail"></div>
+        <!-- ============== Hero: Map (with camera PiP) + Telemetry Stack ============== -->
+        <section class="hero-v2">
+
+            <div class="hero-v2-map-wrap panel" id="map-panel">
+                <div id="map"></div>
+
+                <div class="hero-v2-map-controls">
+                    <button class="hero-v2-map-btn" type="button" onclick="focusOnHome()" title="Karte zentrieren" aria-label="Karte zentrieren">⊙</button>
+                    <button class="hero-v2-map-btn" type="button" id="map-fullscreen-btn" onclick="toggleMapFullscreen()" title="Karte als Vollbild" aria-label="Karte als Vollbild">⛶</button>
                 </div>
-                <div class="main-status-battery">
-                    <div class="main-status-battery-label" id="main-battery-label">Akku —</div>
-                    <div class="main-status-battery-bar" aria-label="Akku-Stand">
-                        <div class="main-status-battery-fill" id="main-battery-fill" style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="main-status-actions">
-                <button class="btn-main-action btn-main-go" type="button" onclick="startSelectedRouteNow()">
-                    ▶ Route starten
-                </button>
-                <button class="btn-main-action btn-main-stop" type="button" onclick="stopAutonomous()">
-                    ■ Roboter anhalten
-                </button>
-                <button class="btn-main-action btn-main-manual" type="button" onclick="window.location.href='/control'">
-                    🕹 Manuell fahren
-                </button>
-            </div>
-        </div>
 
-        <!-- Battery lock warning banner -->
-        <div id="dashboard-battery-lock" class="dashboard-battery-lock" style="display: none;">
-            <span class="dashboard-battery-lock-icon">&#9888;</span>
-            <div>
-                <strong>Akku-Sperre aktiv</strong> — Akku zu niedrig, keine Missionen möglich.
-                Roboter muss erst auf mindestens 80 % laden.
-            </div>
-        </div>
-
-        <!-- Map panel — hero element of the dashboard.  DOM-first so CSS grid
-             can place it in the dominant left column on desktop.  Toolbar merges title,
-             action buttons, route-info pill AND legend into one compact row
-             so the map itself gets maximum vertical space. -->
-        <div class="panel" id="map-panel">
-            <div class="map-toolbar" onclick="expandPanel('map-panel', event)">
-                <h2>Karte</h2>
-                <button class="btn-map-action" type="button" onclick="event.stopPropagation(); focusOnHome()">
-                    🎯 Zentrieren
-                </button>
-                <button class="btn-map-action" type="button" id="map-fullscreen-btn"
-                        onclick="event.stopPropagation(); toggleMapFullscreen()" title="Vollbild ein-/ausschalten">
-                    ⛶ Vollbild
-                </button>
-                <span class="panel-expand-hint">Vergrößern</span>
-                <button class="panel-close-btn" type="button" onclick="event.stopPropagation(); collapsePanel()">✕ Schließen</button>
-                <div class="route-info-pill" id="route-info" style="display: none;">
+                <!-- Route info top-left (preserves existing IDs) -->
+                <div class="hero-v2-route-info route-info-pill" id="route-info" style="display: none;">
                     <span class="route-info-icon">🛣</span>
                     <span class="route-info-text">
                         <span class="route-info-label">Route:</span>
@@ -110,186 +64,195 @@
                         <span class="route-distance" id="route-distance"></span>
                     </span>
                 </div>
-                <div class="map-spacer"></div>
-                <div class="map-legend" aria-label="Karten-Legende">
-                    <span class="map-legend-item">
-                        <span class="map-legend-dot map-legend-dot-blue" aria-hidden="true"></span>
-                        Position
-                    </span>
-                    <span class="map-legend-item">
-                        <span class="map-legend-dot map-legend-dot-green" aria-hidden="true"></span>
-                        Ladestation
-                    </span>
-                    <span class="map-legend-item">
-                        <span class="map-legend-line" aria-hidden="true"></span>
-                        Route
-                    </span>
-                </div>
-            </div>
 
-            <div id="map"></div>
-        </div>
+                <!-- Camera PiP overlay (preserves all camera IDs, onclicks, data attrs) -->
+                <div class="hero-v2-camera-pip" id="camera-panel">
+                    <div class="camera-container" id="camera-container" style="display: block;">
+                        <div id="camera-placeholder" class="camera-placeholder">Kamera wird geladen …</div>
+                        <img id="camera-feed" alt="Kamera Feed" />
+                        <div id="camera-loading" class="camera-loading" style="display:none;">
+                            <div class="camera-loading-spinner" aria-hidden="true"></div>
+                            <div class="camera-loading-text">Lade Kamera…</div>
+                        </div>
 
-        <div class="panel" id="camera-panel">
-            <div class="camera-toolbar">
-                <h2>Kameras</h2>
-                <div class="camera-tabs debug-only" role="tablist" aria-label="Kamera-Ansicht">
-                    <button id="cam-tab-btn-live" class="cam-tab-btn active" type="button"
-                            role="tab" aria-selected="true"
-                            onclick="switchCameraTab('live', this)">Live</button>
-                    <button id="cam-tab-btn-debug" class="cam-tab-btn" type="button"
-                            role="tab" aria-selected="false"
-                            onclick="switchCameraTab('debug', this)">Debug</button>
-                </div>
-            </div>
-            <div class="camera-controls cam-tab-live" id="camera-controls">
-                <div class="cam-section cam-section-live">
-                    <button class="camera-btn active" onclick="openCameraStream('main', this)" data-cam-label="Bodenkamera">
-                        <span class="cam-icon">⬇</span><span class="cam-label">Bodenkamera</span>
-                    </button>
-                    <button class="camera-btn" onclick="openCameraStream('thermal2', this)" data-cam-label="Frontkamera">
-                        <span class="cam-icon">⬆</span><span class="cam-label">Frontkamera</span>
-                    </button>
-                    <button class="camera-btn" onclick="openCameraStream('rgb2', this)" data-cam-label="Rückkamera">
-                        <span class="cam-icon">⬅</span><span class="cam-label">Rückkamera</span>
-                    </button>
-                    <button class="camera-btn" onclick="openCameraStream('thermal1', this)" data-cam-label="Wärmebild">
-                        <span class="cam-icon">🌡</span><span class="cam-label">Wärmebild</span>
-                    </button>
-                </div>
-                <div class="cam-section cam-section-debug">
-                    <button class="camera-btn" onclick="openCameraStream('depth_debug', this)" data-cam-label="3D-Tiefe (Debug)">
-                        <span class="cam-icon">🌐</span><span class="cam-label">3D-Tiefe</span>
-                    </button>
-                    <button class="camera-btn" onclick="openCameraStream('lidar_debug', this)" data-cam-label="LiDAR (Debug)">
-                        <span class="cam-icon">🛰</span><span class="cam-label">LiDAR</span>
-                    </button>
-                </div>
-            </div>
-            <!-- Hidden: feed lives here when modal is closed, moved into modal when open -->
-            <div class="camera-container" id="camera-container" style="display:none;">
-                <div id="camera-placeholder" class="camera-placeholder">Kamera nicht verfügbar</div>
-                <img id="camera-feed" alt="Kamera Feed" />
-                <div id="camera-loading" class="camera-loading">
-                    <div class="camera-loading-spinner" aria-hidden="true"></div>
-                    <div class="camera-loading-text">Lade Kamera…</div>
-                </div>
-            </div>
-        </div>
+                        <!-- 5 camera tabs in PiP — uses switchCamera() only (no modal). Modal opens only
+                             when user clicks the camera image. Modal gets its own tabs injected via JS. -->
+                        <div class="camera-controls hero-v2-camera-tabs" id="camera-controls">
+                            <button class="camera-btn active" type="button" onclick="switchCamera('main', this)" data-cam-label="Bodenkamera" data-cam="main">Boden</button>
+                            <button class="camera-btn" type="button" onclick="switchCamera('thermal2', this)" data-cam-label="Frontkamera" data-cam="thermal2">Front</button>
+                            <button class="camera-btn" type="button" onclick="switchCamera('person_detection', this)" data-cam-label="Personen-Erkennung" data-cam="person_detection">Person</button>
+                            <button class="camera-btn" type="button" onclick="switchCamera('rgb2', this)" data-cam-label="Rückkamera" data-cam="rgb2">Rück</button>
+                            <button class="camera-btn" type="button" onclick="switchCamera('depth_debug', this)" data-cam-label="3D-Tiefe (Debug)" data-cam="depth_debug">Tiefe</button>
+                            <button class="camera-btn" type="button" onclick="switchCamera('lidar_debug', this)" data-cam-label="LiDAR (Debug)" data-cam="lidar_debug">LiDAR</button>
+                        </div>
 
-        <!-- Control panel — two clear sections instead of mixed-purpose grid:
-             1. Routen verwalten (admin: select/new/edit/delete)
-             2. Robotersteuerung (peripherals + autonomy toggle)
-             Note: "Route jetzt starten" + "Roboter anhalten" already live in
-             the main-status-panel at the top of the page; not duplicated here.
-             Icons are inside .btn-icon spans OUTSIDE the toggleable text spans
-             so the JS that writes textContent='Licht Ein/Aus' doesn't wipe them. -->
-        <div class="panel" id="control-panel">
-            <div class="control-section">
-                <div class="control-section-header">
-                    <h3 class="section-title">Routen verwalten</h3>
-                    <span class="section-hint">Routen erstellen, bearbeiten oder löschen</span>
-                </div>
-                <div class="route-selector">
-                    <label for="route-select">Aktive Route</label>
-                    <select id="route-select" onchange="loadSelectedRoute()">
-                        <option value="">— keine —</option>
-                    </select>
-                </div>
-                <div class="control-action-grid">
-                    <button class="btn-control-record" type="button" onclick="startRecording()">
-                        <span class="btn-icon" aria-hidden="true">🔴</span>
-                        <span class="btn-text">Route aufnehmen</span>
-                    </button>
-                    <button class="btn-control-edit" type="button" onclick="openRouteEditor('new')">
-                        <span class="btn-icon" aria-hidden="true">➕</span>
-                        <span class="btn-text">Neue Route (Karte)</span>
-                    </button>
-                    <button class="btn-control-edit" type="button" onclick="openRouteEditor('edit')">
-                        <span class="btn-icon" aria-hidden="true">✏</span>
-                        <span class="btn-text">Route bearbeiten</span>
-                    </button>
-                    <button class="btn-control-danger" type="button" onclick="deleteCurrentRoute()">
-                        <span class="btn-icon" aria-hidden="true">🗑</span>
-                        <span class="btn-text">Route löschen</span>
-                    </button>
-                </div>
-
-                <!-- Recording mode panel (hidden by default) -->
-                <div id="recording-panel" class="recording-panel" style="display:none;">
-                    <div class="recording-header">
-                        <span class="recording-indicator">🔴 Aufnahme läuft</span>
-                        <span class="recording-count" id="recording-count">0 Punkte</span>
+                        <div class="hero-v2-camera-rec"><span>LIVE</span></div>
+                        <div class="hero-v2-camera-esc-hint" aria-hidden="true">ESC zum Verlassen</div>
                     </div>
-                    <p class="recording-hint">Fahren Sie den Roboter zur gewünschten Position und drücken Sie <strong>⭕ Circle</strong> auf dem Controller oder den Knopf unten.</p>
-                    <button class="btn-record-waypoint" type="button" onclick="saveWaypointFromScreen()">
-                        📍 Punkt speichern
-                    </button>
-                    <div class="recording-actions">
-                        <button class="btn-record-save" type="button" onclick="stopRecording()">
-                            ✅ Aufnahme beenden & speichern
-                        </button>
-                        <button class="btn-record-cancel" type="button" onclick="cancelRecording()">
-                            Abbrechen
-                        </button>
+
+                    <!-- Hidden Live/Debug tabs (kept so JS that targets them doesn't crash) -->
+                    <div class="camera-tabs debug-only" role="tablist" style="display:none;" aria-label="Kamera-Ansicht">
+                        <button id="cam-tab-btn-live" class="cam-tab-btn active" type="button" role="tab" aria-selected="true" onclick="switchCameraTab('live', this)">Live</button>
+                        <button id="cam-tab-btn-debug" class="cam-tab-btn" type="button" role="tab" aria-selected="false" onclick="switchCameraTab('debug', this)">Debug</button>
                     </div>
                 </div>
             </div>
 
-            <div class="control-section">
-                <div class="control-section-header">
-                    <h3 class="section-title">Robotersteuerung</h3>
-                    <span class="section-hint">Direkte Befehle an den Roboter</span>
+            <!-- Telemetry stack (right column) -->
+            <aside class="hero-v2-telem">
+
+                <!-- Mode card: existing #main-status-headline + #main-status-detail moved here for visibility -->
+                <div class="hero-v2-telem-card telem-mode" id="mission-mode">
+                    <div class="hero-v2-telem-label">Aktueller Status</div>
+                    <div class="hero-v2-telem-value t-value" id="main-status-headline">Roboter startet — bitte warten</div>
+                    <div class="hero-v2-telem-sub" id="main-status-detail"></div>
                 </div>
-                <div class="control-action-grid control-cmd-grid">
-                    <button id="autonomous-btn" class="btn-stop btn-large" type="button" onclick="toggleAutonomousMode()">
-                        <span class="btn-icon" aria-hidden="true">🛡</span>
-                        <span class="btn-text">Automatik Aus</span>
-                    </button>
 
-                    <button class="btn-start btn-large" type="button" onclick="goToCharge()">
-                        <span class="btn-icon" aria-hidden="true">🔌</span>
-                        <span class="btn-text">Zur Ladestation fahren</span>
-                    </button>
+                <!-- Battery card: existing IDs preserved for JS write target -->
+                <div class="hero-v2-telem-card t-battery telem-battery">
+                    <div class="hero-v2-telem-label">Akku</div>
+                    <div class="hero-v2-telem-value t-value main-status-battery-label" id="main-battery-label">Akku —</div>
+                    <div class="hero-v2-telem-meter t-meter main-status-battery-bar" aria-label="Akku-Stand">
+                        <span class="t-meter-fill main-status-battery-fill" id="main-battery-fill" style="width: 0%"></span>
+                    </div>
+                </div>
 
-                    <button id="light-btn" class="btn-light-off btn-large" type="button" onclick="toggleLight()">
-                        <span class="btn-icon" aria-hidden="true">💡</span>
-                        <span class="btn-text" id="light-text">Licht Aus</span>
-                    </button>
+                <!-- Speed card -->
+                <div class="hero-v2-telem-card telem-speed">
+                    <div class="hero-v2-telem-label">Geschwindigkeit</div>
+                    <div class="hero-v2-telem-value t-value" id="velocity-value-display">— m/s</div>
+                </div>
 
-                    <button id="charging-btn" class="btn-charging-off btn-large" type="button" onclick="toggleCharging()">
-                        <span class="btn-icon" aria-hidden="true">⚡</span>
-                        <span class="btn-text" id="charging-text">Laden Aus</span>
-                    </button>
+            </aside>
+
+        </section>
+
+        <!-- ============== Mission bar (control panel — original buttons + IDs preserved) ============== -->
+        <section class="panel mission-bar dash-v2-mission" id="control-panel">
+
+            <!-- Routes management section -->
+            <div class="mb-section mb-routes">
+                <span class="mb-label">Route</span>
+                <select id="route-select" onchange="loadSelectedRoute()" aria-label="Aktive Route">
+                    <option value="">— keine —</option>
+                </select>
+                <div class="mb-route-buttons">
+                    <button class="btn-edit btn-icon-only" type="button" onclick="startRecording()" title="Route aufnehmen" aria-label="Route aufnehmen">🔴</button>
+                    <button class="btn-edit btn-icon-only" type="button" onclick="openRouteEditor('new')" title="Neue Route" aria-label="Neue Route">＋</button>
+                    <button class="btn-edit btn-icon-only" type="button" onclick="openRouteEditor('edit')" title="Route bearbeiten" aria-label="Route bearbeiten">✎</button>
+                    <button class="btn-delete btn-icon-only" type="button" onclick="deleteCurrentRoute()" title="Route löschen" aria-label="Route löschen">✕</button>
                 </div>
             </div>
-        </div>
 
-        <!-- Activity log panel — Status sub-panel removed (duplicated the
-             main-status card at the top of the page). Log now occupies the
-             full panel width with richer info per entry. -->
-        <div class="panel" id="log-panel">
+            <div class="mb-divider" aria-hidden="true"></div>
+
+            <!-- Primary actions (3 from main-status-panel + 4 from old control-panel) -->
+            <div class="mb-section mb-actions">
+                <button class="btn-start btn-large btn-main-go" type="button" onclick="startSelectedRouteNow()">
+                    <span class="btn-text">▶ Route starten</span>
+                </button>
+
+                <button id="autonomous-btn" class="btn-stop btn-large btn-primary-action" type="button" onclick="toggleAutonomousMode()">
+                    <span class="btn-icon" aria-hidden="true">🛡</span>
+                    <span class="btn-text">Automatik Aus</span>
+                </button>
+
+                <button class="btn-start btn-large" type="button" onclick="goToCharge()">
+                    <span class="btn-text">Zur Ladestation</span>
+                </button>
+
+                <button id="light-btn" class="btn-light-off btn-large" type="button" onclick="toggleLight()">
+                    <span class="btn-text" id="light-text">Licht Aus</span>
+                </button>
+
+                <button id="charging-btn" class="btn-charging-off btn-large" type="button" onclick="toggleCharging()">
+                    <span class="btn-text" id="charging-text">Laden Aus</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- ============== Event ticker (single-line, replaces verbose log panel) ============== -->
+        <section class="event-ticker-v2" aria-label="Letztes Ereignis">
+            <span class="event-ticker-v2-label">Ereignisse</span>
+            <div class="event-ticker-v2-content">
+                <span class="event-ticker-v2-time" id="event-ticker-v2-time">—</span>
+                <span class="event-ticker-v2-msg" id="event-ticker-v2-msg">Warte auf Ereignisse …</span>
+            </div>
+            <button class="btn-clear-logs event-ticker-v2-clear" id="clear-logs-btn" type="button" onclick="clearLogs()" title="Log leeren" aria-label="Log leeren">🗑</button>
+            <a href="/events" class="event-ticker-v2-link">Alle →</a>
+        </section>
+
+        <!-- ============== Hidden legacy containers (preserved for JS dependencies) ============== -->
+
+        <!-- Original log panel kept hidden so #event-log still receives new entries -->
+        <div class="panel" id="log-panel" style="display: none;" aria-hidden="true">
             <div class="log-header-row">
                 <h2 style="margin: 0;">Ereignisprotokoll</h2>
                 <div class="log-header-controls">
                     <span id="log-summary" class="log-summary"></span>
-                    <button id="clear-logs-btn" class="btn-clear-logs" onclick="clearLogs()" title="Log leeren">
-                        🗑 Log leeren
-                    </button>
                 </div>
             </div>
-            <p class="log-hint">Hier erscheinen Systemereignisse: Warnungen, Fehler, Routen-Start/Ende, manuelle Eingriffe. Die letzten 100 Einträge bleiben gespeichert.</p>
             <div id="event-log" class="event-log-list"></div>
-            <!-- Hidden legacy status spans — kept so old JS that writes here
-                 doesn't crash. The visible status now lives in the
-                 .main-status-panel at the top of the page. -->
+            <!-- Hidden legacy elements wrapped in .status-card so batteryEl.closest('.status-card') in updateRobotStatus doesn't return null and throw -->
             <div style="display: none;" aria-hidden="true">
-                <span id="battery-level"></span>
-                <span id="velocity-value"></span>
-                <span id="runtime-value"></span>
+                <div class="status-card"><span id="battery-level"></span></div>
+                <div class="status-card"><span id="velocity-value"></span></div>
+                <div class="status-card"><span id="runtime-value"></span></div>
             </div>
         </div>
-    </div>
+
+        <!-- Original main-status-panel kept invisible (some JS may target #main-status-panel etc) -->
+        <div class="panel main-status-panel" id="main-status-panel" style="display: none;" aria-hidden="true">
+            <div class="main-status-top">
+                <div class="main-status-icon" id="main-status-icon" aria-hidden="true">⏳</div>
+                <div class="main-status-text">
+                    <!-- Mirrors: writes here are reflected in visible mode card via JS mirror -->
+                    <div class="main-status-headline" data-mirror-to="main-status-headline"></div>
+                    <div class="main-status-detail" data-mirror-to="main-status-detail"></div>
+                </div>
+                <div class="main-status-battery">
+                    <div class="main-status-battery-label" data-mirror-to="main-battery-label"></div>
+                    <div class="main-status-battery-bar" aria-label="Akku-Stand">
+                        <div class="main-status-battery-fill" data-mirror-fill="main-battery-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recording panel — Apple-style floating bottom sheet (v2 design)
+             Preserves all original IDs/classes/onclicks so existing JS works unchanged. -->
+        <div id="recording-panel" class="recording-panel recording-panel-v2" style="display:none;">
+            <div class="rec-header">
+                <span class="rec-dot" aria-hidden="true"></span>
+                <span class="rec-status">Aufnahme läuft</span>
+                <span class="rec-divider" aria-hidden="true"></span>
+                <span class="rec-count" id="recording-count">0 Punkte</span>
+            </div>
+            <p class="rec-hint">Roboter zur gewünschten Position fahren und Waypoint speichern — oder <strong>⭕ Circle</strong> auf dem Controller drücken.</p>
+            <div class="rec-actions">
+                <button class="rec-btn-primary btn-record-waypoint" type="button" onclick="saveWaypointFromScreen()" aria-label="Waypoint speichern">
+                    <span class="rec-btn-icon" aria-hidden="true">📍</span>
+                    <span class="rec-btn-label">Waypoint setzen</span>
+                </button>
+                <button class="rec-btn-success btn-record-save" type="button" onclick="stopRecording()">
+                    <span aria-hidden="true">✓</span> Beenden &amp; speichern
+                </button>
+                <button class="rec-btn-ghost btn-record-cancel" type="button" onclick="cancelRecording()">
+                    Abbrechen
+                </button>
+            </div>
+        </div>
+
+        <!-- Battery lock warning banner (preserves original element) -->
+        <div id="dashboard-battery-lock" class="dashboard-battery-lock" style="display: none;">
+            <span class="dashboard-battery-lock-icon">&#9888;</span>
+            <div>
+                <strong>Akku-Sperre aktiv</strong> — Akku zu niedrig, keine Missionen möglich.
+                Roboter muss erst auf mindestens 80 % laden.
+            </div>
+        </div>
+
+    </main>
 
     <!-- Confirmation Modal -->
     <div id="confirm-modal" class="modal-overlay">
@@ -308,13 +271,13 @@
             <h3 id="editor-title">Neue Route</h3>
             <button class="close-btn" onclick="closeRouteEditor()" aria-label="Schließen">×</button>
         </div>
-        
+
         <div class="editor-form">
             <div class="form-group">
                 <label>Name</label>
-                <input type="text" id="editor-route-name" placeholder="z. B. Hauptgebäude">
+                <input type="text" id="editor-route-name" placeholder="z. B. Hauptgebäude">
             </div>
-            
+
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="editor-loop-mode" onchange="toggleLoopMode()">
@@ -322,21 +285,21 @@
                 </label>
                 <p class="form-hint">Bei aktiviertem Loop fährt der Roboter die Route als geschlossenen Rundgang (Start- und Endpunkt verbunden).</p>
             </div>
-            
+
             <div class="form-group">
                 <button id="reverse-route-btn" class="btn-edit" onclick="reverseRouteOrder()" disabled style="width: 100%;">
                     Reihenfolge umkehren
                 </button>
             </div>
-            
+
             <div class="editor-info" id="editor-info-text">
                 0 Waypoints — Karte anklicken zum Hinzufügen
             </div>
-            
+
             <div class="waypoint-list" id="waypoint-list">
                 <p class="waypoint-empty-hint">Noch keine Waypoints</p>
             </div>
-            
+
             <div class="button-group" style="grid-template-columns: 1fr;">
                 <button class="btn-save" onclick="saveRoute()">Speichern</button>
                 <button class="btn-stop" onclick="closeRouteEditor()">Abbrechen</button>
@@ -344,11 +307,7 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/js/index.js?v=__APP_VERSION__"></script>
-<!-- Gemeinsame Scripts -->
-<script src="/static/js/common.js?v=__APP_VERSION__"></script>
-    <!-- Fullscreen Camera Modal -->
+    <!-- Fullscreen Camera Modal (preserved) -->
     <div id="camera-modal" class="camera-modal-overlay" onclick="closeCameraModal()">
         <div class="camera-modal-header">
             <span id="camera-modal-title">Kamera</span>
@@ -356,26 +315,209 @@
         </div>
         <div id="camera-modal-feed-wrapper" style="display:flex;align-items:center;justify-content:center;flex:1;padding-top:48px;width:100%;height:100%;"></div>
     </div>
-<!-- Log panel: live counter under the header.
-     Updates whenever entries are added/removed from #event-log. -->
-<script>
-(function () {
-    function updateLogSummary() {
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/index.js?v=v2-r17-1421"></script>
+    <script src="/static/js/common.js?v=v2-r17-1421"></script>
+    <script src="/static/js/tm_estop.js?v=v2-r17-1421"></script>
+    <script src="/static/js/agg-pill.js?v=v2-r28-inaktiv"></script>
+
+    <!-- v2 dashboard glue: mirror main-status-panel writes to telem cards, mode-card color sync, ticker, hotkeys -->
+    <script>
+    (function() {
+        // ---- Battery meter sync (drives --val on telem-card.t-battery + manages no-data state) ----
+        const batteryFill = document.getElementById('main-battery-fill');
+        const batteryLabel = document.getElementById('main-battery-label');
+        const batteryCard = document.querySelector('.hero-v2-telem-card.t-battery');
+        function syncBattery() {
+            if (!batteryFill || !batteryCard || !batteryLabel) return;
+            // Detect no-data state: label still shows the placeholder "—"
+            const labelTxt = batteryLabel.textContent || '';
+            const hasData = /\d/.test(labelTxt);
+            batteryCard.classList.toggle('no-data', !hasData);
+            // Also hide the false-positive battery-lock banner (JS sets it because 0 < 20)
+            const lockBanner = document.getElementById('dashboard-battery-lock');
+            if (lockBanner && !hasData) {
+                lockBanner.style.setProperty('display', 'none', 'important');
+            }
+            if (!hasData) {
+                batteryCard.classList.remove('low', 'critical', 'full');
+                batteryCard.style.setProperty('--val', '0%');
+                return;
+            }
+            const w = batteryFill.style.width || '0%';
+            const m = w.match(/(-?\d+(?:[.,]\d+)?)/);
+            const v = m ? parseFloat(m[1].replace(',', '.')) : NaN;
+            if (Number.isFinite(v)) {
+                const c = Math.max(0, Math.min(100, v));
+                batteryCard.style.setProperty('--val', c + '%');
+                batteryCard.classList.toggle('low', c > 0 && c < 25);
+                batteryCard.classList.toggle('critical', c > 0 && c < 12);
+                batteryCard.classList.toggle('full', c >= 95);
+            }
+        }
+        if (batteryFill && batteryLabel) {
+            syncBattery();
+            new MutationObserver(syncBattery).observe(batteryFill, { attributes: true, attributeFilter: ['style'] });
+            new MutationObserver(syncBattery).observe(batteryLabel, { childList: true, characterData: true, subtree: true });
+        }
+
+        // ---- Mode card color sync — derive from autonomous-btn label ----
+        const autonomBtn = document.getElementById('autonomous-btn');
+        const modeChip = document.getElementById('mission-mode');
+        function syncMode() {
+            if (!autonomBtn || !modeChip) return;
+            const txt = (autonomBtn.querySelector('.btn-text') || autonomBtn).textContent || '';
+            const isOn = /\b(an|ein|on|aktiv)\b/i.test(txt);
+            modeChip.classList.remove('mode-auto', 'mode-idle', 'mode-emergency');
+            modeChip.classList.add(isOn ? 'mode-auto' : 'mode-idle');
+        }
+        if (autonomBtn) {
+            syncMode();
+            new MutationObserver(syncMode).observe(autonomBtn, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        }
+
+        // ---- Event ticker: mirror latest #event-log entry ----
         const log = document.getElementById('event-log');
-        const summary = document.getElementById('log-summary');
-        if (!log || !summary) return;
-        const n = log.querySelectorAll('.log-entry').length;
-        if (n === 0) summary.textContent = '';
-        else if (n === 1) summary.textContent = '1 Eintrag';
-        else summary.textContent = `${n} Einträge`;
-    }
-    document.addEventListener('DOMContentLoaded', () => {
-        const log = document.getElementById('event-log');
-        if (!log) return;
-        updateLogSummary();
-        new MutationObserver(updateLogSummary).observe(log, { childList: true });
-    });
-})();
-</script>
+        const tickerMsg = document.getElementById('event-ticker-v2-msg');
+        const tickerTime = document.getElementById('event-ticker-v2-time');
+        if (log && tickerMsg) {
+            function refreshTicker() {
+                const entry = log.firstElementChild || log.lastElementChild;
+                if (!entry) return;
+                const txt = (entry.textContent || '').trim();
+                if (!txt) return;
+                const m = txt.match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–·]?\s*(.+)$/);
+                if (m) {
+                    if (tickerTime) tickerTime.textContent = m[1];
+                    tickerMsg.textContent = m[2];
+                } else {
+                    if (tickerTime) tickerTime.textContent = '';
+                    tickerMsg.textContent = txt;
+                }
+            }
+            new MutationObserver(refreshTicker).observe(log, { childList: true, subtree: true, characterData: true });
+            refreshTicker();
+        }
+
+        // ---- Map fullscreen ----
+        window.toggleMapFullscreen = window.toggleMapFullscreen || function() {
+            const panel = document.getElementById('map-panel');
+            const mapEl = document.getElementById('map');
+            if (!panel) return;
+            if (document.fullscreenElement) { document.exitFullscreen(); return; }
+            const req = panel.requestFullscreen || panel.webkitRequestFullscreen || panel.msRequestFullscreen;
+            if (req) req.call(panel).then(() => {
+                setTimeout(() => {
+                    if (window.L && mapEl && mapEl._leaflet_map) mapEl._leaflet_map.invalidateSize();
+                    window.dispatchEvent(new Event('resize'));
+                }, 80);
+            });
+        };
+        document.addEventListener('fullscreenchange', () => {
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
+        });
+
+        // ---- Camera PiP click → opens fullscreen MODAL with current camera + tabs ----
+        const camFeed = document.getElementById('camera-feed');
+        if (camFeed) {
+            camFeed.style.cursor = 'zoom-in';
+            camFeed.title = 'Klick zum Vergrößern · ESC zum Schließen';
+            camFeed.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const currentCam = window.currentCameraStream || 'main';
+                const currentBtn = document.querySelector('.hero-v2-camera-tabs .camera-btn[data-cam="' + currentCam + '"]')
+                                    || document.querySelector('.hero-v2-camera-tabs .camera-btn.active');
+                if (typeof openCameraStream === 'function') {
+                    openCameraStream(currentCam, currentBtn);
+                }
+            });
+        }
+
+        // ---- Auto-start Bodenkamera so the PiP shows a live feed on page load ----
+        function autoStartCamera() {
+            const firstActiveTab = document.querySelector('.hero-v2-camera-tabs .camera-btn.active')
+                                   || document.querySelector('.hero-v2-camera-tabs .camera-btn');
+            if (!firstActiveTab) return;
+            const camKey = firstActiveTab.getAttribute('data-cam') || 'main';
+            if (typeof switchCamera === 'function') {
+                try { switchCamera(camKey, firstActiveTab); } catch (e) {}
+            }
+        }
+        setTimeout(autoStartCamera, 400);
+
+        // ---- Inject camera tabs into the FULLSCREEN MODAL so user can switch in big view ----
+        function ensureModalTabs() {
+            const modalHeader = document.querySelector('#camera-modal .camera-modal-header');
+            if (!modalHeader || modalHeader.querySelector('.modal-cam-tabs')) return;
+            const tabs = document.createElement('div');
+            tabs.className = 'modal-cam-tabs';
+            const cams = [
+                { key: 'main',        label: 'Boden' },
+                { key: 'thermal2',    label: 'Front' },
+                { key: 'person_detection', label: 'Person' },
+                { key: 'rgb2',        label: 'Rück' },
+                { key: 'depth_debug', label: 'Tiefe' },
+                { key: 'lidar_debug', label: 'LiDAR' }
+            ];
+            cams.forEach(c => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'camera-btn modal-cam-btn';
+                b.setAttribute('data-cam', c.key);
+                b.textContent = c.label;
+                b.addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    if (typeof openCameraStream === 'function') {
+                        openCameraStream(c.key, b);
+                    }
+                    syncModalTabsActive();
+                });
+                tabs.appendChild(b);
+            });
+            // Insert tabs into the header (between title and close button)
+            const closeBtn = modalHeader.querySelector('.camera-modal-close');
+            if (closeBtn) modalHeader.insertBefore(tabs, closeBtn);
+            else modalHeader.appendChild(tabs);
+            syncModalTabsActive();
+        }
+        function syncModalTabsActive() {
+            const current = window.currentCameraStream;
+            document.querySelectorAll('.modal-cam-tabs .modal-cam-btn').forEach(b => {
+                b.classList.toggle('active', b.getAttribute('data-cam') === current);
+            });
+        }
+        // Inject as soon as DOM is ready
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureModalTabs);
+        else ensureModalTabs();
+        // Re-sync active on every modal open
+        const modal = document.getElementById('camera-modal');
+        if (modal) {
+            new MutationObserver(syncModalTabsActive).observe(modal, { attributes: true, attributeFilter: ['class'] });
+        }
+    })();
+    </script>
+
+    <!-- Log summary updater (preserved from original) -->
+    <script>
+    (function () {
+        function updateLogSummary() {
+            const log = document.getElementById('event-log');
+            const summary = document.getElementById('log-summary');
+            if (!log || !summary) return;
+            const n = log.querySelectorAll('.log-entry').length;
+            if (n === 0) summary.textContent = '';
+            else if (n === 1) summary.textContent = '1 Eintrag';
+            else summary.textContent = `${n} Einträge`;
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            const log = document.getElementById('event-log');
+            if (!log) return;
+            updateLogSummary();
+            new MutationObserver(updateLogSummary).observe(log, { childList: true });
+        });
+    })();
+    </script>
+    <script src="/static/js/tm_map_controls_apple.js?v=v2-r26-rebind"></script>
 </body>
 </html>

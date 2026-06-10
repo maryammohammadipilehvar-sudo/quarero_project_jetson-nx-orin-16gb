@@ -1,0 +1,92 @@
+/* ============================================================================
+ * tm_map_fullscreen_pro.css  (v2 - layout only)
+ * Hides the page chrome when body.map-fullscreen-active is set.
+ * Map control button styling lives in tm_map_controls_apple.css.
+ * ========================================================================== */
+
+body.map-fullscreen-active {
+    overflow: hidden !important;
+    background: #000 !important;
+}
+
+/* Hide top navigation entirely */
+body.map-fullscreen-active .navbar,
+body.map-fullscreen-active > .navbar {
+    display: none !important;
+}
+
+/* Hide the right-hand telemetry column (status / Akku / Geschwindigkeit cards) */
+body.map-fullscreen-active .hero-v2-telem,
+body.map-fullscreen-active main.dashboard-v2 .hero-v2-telem {
+    display: none !important;
+}
+
+/* Hide anything that isn't the map panel inside the dashboard main */
+body.map-fullscreen-active main.dashboard-v2 > *:not(.hero-v2),
+body.map-fullscreen-active main.dashboard-v2 .hero-v2 > *:not(.hero-v2-map-wrap) {
+    display: none !important;
+}
+
+/* Reset main / hero layout so the map can fill the viewport */
+body.map-fullscreen-active main,
+body.map-fullscreen-active main.dashboard,
+body.map-fullscreen-active main.dashboard-v2 {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    display: block !important;
+    background: #000 !important;
+}
+
+body.map-fullscreen-active main.dashboard-v2 .hero-v2 {
+    display: block !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+}
+
+/* The map panel itself covers the entire viewport, edge-to-edge */
+body.map-fullscreen-active #map-panel.map-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #000 !important;
+    z-index: 9998 !important;
+}
+
+body.map-fullscreen-active #map-panel.map-fullscreen #map {
+    width: 100vw !important;
+    height: 100vh !important;
+    border-radius: 0 !important;
+}
+
+/* Hide the camera PiP inside the map panel — distraction-free */
+body.map-fullscreen-active #map-panel.map-fullscreen .hero-v2-camera-pip,
+body.map-fullscreen-active #map-panel.map-fullscreen #camera-panel {
+    display: none !important;
+}
+
+/* Keep route-info pill at consistent inset in fullscreen */
+body.map-fullscreen-active #map-panel.map-fullscreen .hero-v2-route-info {
+    top: 20px !important;
+    left: 20px !important;
+}
+
+/* Hide any sticky footer / ticker / floating logs while in fullscreen */
+body.map-fullscreen-active .ticker,
+body.map-fullscreen-active #ticker,
+body.map-fullscreen-active .activity-log,
+body.map-fullscreen-active .live-log,
+body.map-fullscreen-active footer {
+    display: none !important;
+}

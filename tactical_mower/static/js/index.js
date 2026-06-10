@@ -931,13 +931,13 @@
 
         // Camera names map
         const cameraNames = {
-            'main': 'RGB Kamera',
-            'person_detection': 'Person Detection',
-            'thermal1': 'Thermal Kamera 1',
-            'thermal2': 'Thermal Kamera 2',
-            'rgb2': 'RGB Kamera 2',
+            'main': 'Bodenkamera',
+            'person_detection': 'Personen-Erkennung',
+            'thermal1': 'Wärmebild',
+            'thermal2': 'Frontkamera',
+            'rgb2': 'Rückkamera',
             'lidar_debug': 'LiDAR Debug',
-            'depth_debug': 'Tiefe (RealSense)'
+            'depth_debug': '3D-Tiefe'
         };
 
         let isCameraModalOpen = false;
@@ -1008,7 +1008,7 @@
             const btn = document.getElementById('map-fullscreen-btn');
             const isFullscreen = panel.classList.toggle('map-fullscreen');
             document.body.classList.toggle('map-fullscreen-active', isFullscreen);
-            btn.textContent = isFullscreen ? '✕ Schließen' : '⛶ Vollbild';
+            btn.textContent = isFullscreen ? '✕' : '⛶';
             setTimeout(() => { if (map) map.invalidateSize(); }, 50);
         }
 

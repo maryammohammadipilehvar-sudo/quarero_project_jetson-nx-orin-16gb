@@ -88,40 +88,6 @@
             }
         };
 
-        // WebSocket für Dock-Ausrichtung (ArUco-Marker) — live cross/heading/perp
-        const wsDockAlign = new WebSocket(`ws://${window.location.host}/ws/dock_align`);
-        wsDockAlign.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'dock_align') updateDockAlign(msg.data);
-            } catch (e) { /* ignore */ }
-        };
-
-        function updateDockAlign(d) {
-            const el = document.getElementById('dock-align-status');
-            if (!el) return;
-            // State is driven by CSS classes (see .coord-display.dock-* in settings.css),
-            // not inline styles, so the box matches the rest of the settings page.
-            el.classList.remove('dock-aligned', 'dock-pending');
-            if (!d || !d.fused) {
-                el.classList.add('empty');
-                el.textContent = 'Marker nicht (beide) sichtbar — Roboter vor die Marker stellen';
-                return;
-            }
-            el.classList.remove('empty');
-            const txt = `seitlich ${d.cross_cm>0?'+':''}${d.cross_cm} cm   |   Winkel ${d.heading_deg>0?'+':''}${d.heading_deg}°   |   Abstand ${d.perp_m} m`;
-            if (d.aligned) {
-                el.classList.add('dock-aligned');
-                el.textContent = '✅ AUSGERICHTET — jetzt speichern.   ' + txt;
-            } else {
-                el.classList.add('dock-pending');
-                let hint = [];
-                if (Math.abs(d.cross_cm) >= 3) hint.push(d.cross_cm > 0 ? 'nach LINKS' : 'nach RECHTS');
-                if (Math.abs(d.heading_deg) >= 3) hint.push('gerade drehen');
-                el.textContent = `noch nicht ausgerichtet (${hint.join(', ')}).   ` + txt;
-            }
-        }
-
         // WebSocket für Robot State (Battery)
         const wsRobotState = new WebSocket(`ws://${window.location.host}/ws/robot_state`);
         let lastRobotStateTime = 0; // Initialize to 0 so timeout check immediately detects no message

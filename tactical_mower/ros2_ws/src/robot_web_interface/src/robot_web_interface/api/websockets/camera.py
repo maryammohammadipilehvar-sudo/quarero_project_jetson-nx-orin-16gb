@@ -448,7 +448,7 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
 
     def mjpeg_reader():
         try:
-            stream = urllib.request.urlopen('http://192.168.10.140:8080/stream', timeout=10)
+            stream = urllib.request.urlopen('http://192.168.10.169:8080/stream', timeout=10)
             buf = b''
             while True:
                 buf += stream.read(8192)

@@ -6,6 +6,15 @@
     <title>Manuelle Steuerung – Robotersteuerung</title>
     <link rel="stylesheet" href="/static/css/common.css?v=__APP_VERSION__" />
     <link rel="stylesheet" href="/static/css/control.css?v=__APP_VERSION__" />
+    <link rel="stylesheet" href="/static/css/tm_dash-v2.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_v2_polish.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_v2_estop_fix.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_estop.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_all-pages-polish.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/v2_round_buttons.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_control_apple.css?v=v2-r21-nojoy" />
+    <link rel="stylesheet" href="/static/css/tm_apple_pro.css?v=v2-r22-applepro" />
+    <link rel="stylesheet" href="/static/css/tm_apple_responsive.css?v=v2-r31-logoleft" />
 </head>
 <body>
     <div class="navbar">
@@ -162,6 +171,59 @@
 
         document.addEventListener('mouseup', stopDrag);
         document.addEventListener('touchend', stopDrag);
+        // Safety: if a release is missed (touch interrupted, focus lost while a
+        // mouse button is held, pointer released outside the window) the heartbeat
+        // would otherwise keep republishing the last command. Force a stop.
+        document.addEventListener('touchcancel', stopDrag);
+        window.addEventListener('blur', () => { pressedSteerKeys.clear(); stopDrag(); });
+
+        // --- Tastatur-Steuerung (Manuelle Steuerung) ---
+        // Pfeiltasten ODER WASD. Speist denselben Sende-Loop wie der Joystick,
+        // d.h. der Heartbeat hält das Kommando aktiv, solange eine Taste gedrückt ist.
+        const pressedSteerKeys = new Set();   // speichert e.code der aktiven Tasten
+        const STEER_KEY_DIR = {
+            ArrowUp: 'fwd',  KeyW: 'fwd',
+            ArrowDown: 'back', KeyS: 'back',
+            ArrowLeft: 'left', KeyA: 'left',
+            ArrowRight: 'right', KeyD: 'right',
+        };
+
+        function applyKeyboardSteering() {
+            let fb = 0, lr = 0;   // fb = vor/zurück, lr = links/rechts
+            for (const code of pressedSteerKeys) {
+                const d = STEER_KEY_DIR[code];
+                if (d === 'fwd') fb = 1;
+                else if (d === 'back') fb = -1;
+                else if (d === 'left') lr = -1;
+                else if (d === 'right') lr = 1;
+            }
+            joystickActive = pressedSteerKeys.size > 0;   // treibt den Heartbeat
+            // sendMovementCommand(x=links/rechts, y=vor/zurück) — gleiche Achsen wie der Joystick.
+            sendMovementCommand(lr, fb);
+        }
+
+        function isTypingTarget(e) {
+            const t = e.target;
+            return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (isTypingTarget(e)) return;
+            if (!(e.code in STEER_KEY_DIR)) return;
+            e.preventDefault();   // verhindert Scrollen mit den Pfeiltasten
+            if (!pressedSteerKeys.has(e.code)) {
+                pressedSteerKeys.add(e.code);
+                applyKeyboardSteering();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (!(e.code in STEER_KEY_DIR)) return;
+            e.preventDefault();
+            if (pressedSteerKeys.delete(e.code)) {
+                applyKeyboardSteering();
+            }
+        });
 
         function startDrag(e) {
             isDragging = true;
@@ -224,17 +286,23 @@
         }
 
         /**
-         * Hintergrund-Loop, der regelmäßig prüft, ob sich das Ziel-Kommando geändert hat.
-         * Wenn ja, wird genau EIN HTTP-Request geschickt.
-         * Dadurch gibt es keine lange Queue mehr und es kommt immer der aktuellste Wert an.
+         * Hintergrund-Loop, der das aktuelle Ziel-Kommando verschickt.
+         * Gesendet wird bei Änderung ODER als Heartbeat (~150 ms), solange der
+         * Joystick gehalten wird. Der robot_controller hält ein Web-Kommando nur
+         * ~0,5 s; ohne Heartbeat stoppt der Roboter beim ruhigen Halten des Sticks.
          */
         async function startMoveSenderLoop() {
+            let lastSendTime = 0;
             while (true) {
                 const { y, x } = latestMoveCommand;
 
-                // Nur senden, wenn sich der Wert seit dem letzten Senden geändert hat
-                if (x !== lastSentMoveCommand.x || y !== lastSentMoveCommand.y) {
+                const now = Date.now();
+                const changed = (x !== lastSentMoveCommand.x || y !== lastSentMoveCommand.y);
+                const heartbeatDue = joystickActive && (now - lastSendTime) >= 150;
+
+                if (changed || heartbeatDue) {
                     lastSentMoveCommand = { x, y };
+                    lastSendTime = now;
                     try {
                         await fetch('/api/control/move', {
                             method: 'POST',
@@ -697,6 +765,9 @@
     </script>
 <!-- Gemeinsame Scripts -->
 <script src="/static/js/common.js?v=__APP_VERSION__"></script>
+    <script src="/static/js/agg-pill.js?v=v2-r28-inaktiv"></script>
+    <script src="/static/js/tm_keyboard_control.js?v=v2-r18-1503"></script>
+    <script src="/static/js/tm_estop.js?v=v2-r17-1421"></script>
     <script src="/static/js/control.js?v=__APP_VERSION__"></script>
 </body>
 </html>

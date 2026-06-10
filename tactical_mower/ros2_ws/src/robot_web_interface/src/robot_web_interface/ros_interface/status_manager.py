@@ -54,10 +54,6 @@ class StatusManager:
         self.last_robot_state_time: Optional[float] = None
         self.robot_connected = False
         self.connection_status_lock = threading.Lock()
-
-        # ArUco dock marker (fused two-marker pose, camera optical frame) for dock setup.
-        self.dock_marker_pose = None       # geometry_msgs/Pose or None
-        self.dock_marker_time: float = 0.0  # wall time of last marker pose
     
     def get_position(self) -> Dict[str, Any]:
         return self.current_position

@@ -15,7 +15,6 @@ SETTINGS_DIR = DATA_DIR / "settings"
 
 SCHEDULES_FILE = SETTINGS_DIR / "schedules.yaml"
 SETTINGS_FILE = SETTINGS_DIR / "settings.yaml"
-ARUCO_DOCK_FILE = SETTINGS_DIR / "aruco_dock.yaml"
 
 # Ensure directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -64,20 +63,6 @@ def save_settings(settings: Dict[str, Any]) -> None:
     """Save system settings to file."""
     with open(SETTINGS_FILE, 'w') as f:
         yaml.dump(settings, f)
-
-
-def load_aruco_dock() -> Dict[str, Any]:
-    """Load the ArUco dock config (empty dict if absent)."""
-    if not ARUCO_DOCK_FILE.exists():
-        return {}
-    with open(ARUCO_DOCK_FILE) as f:
-        return yaml.safe_load(f) or {}
-
-
-def save_aruco_dock(cfg: Dict[str, Any]) -> None:
-    """Save the ArUco dock config (preserves all keys passed in)."""
-    with open(ARUCO_DOCK_FILE, 'w') as f:
-        yaml.dump(cfg, f, default_flow_style=False, sort_keys=True)
 
 
 def load_schedules() -> Dict[str, Any]:

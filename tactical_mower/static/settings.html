@@ -6,6 +6,14 @@
     <title>Einstellungen – Robotersteuerung</title>
     <link rel="stylesheet" href="/static/css/common.css?v=__APP_VERSION__" />
     <link rel="stylesheet" href="/static/css/settings.css?v=__APP_VERSION__" />
+    <link rel="stylesheet" href="/static/css/tm_dash-v2.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_v2_polish.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_v2_estop_fix.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_estop.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_all-pages-polish.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/v2_round_buttons.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/tm_apple_pro.css?v=v2-r22-applepro" />
+    <link rel="stylesheet" href="/static/css/tm_apple_responsive.css?v=v2-r31-logoleft" />
 </head>
 <body>
     <div class="navbar">
@@ -90,12 +98,6 @@
                     <div id="home-point-display" class="coord-display empty">
                         Noch nicht gesetzt
                     </div>
-                </div>
-
-                <div class="form-group" id="dock-align-group">
-                    <label>Dock-Ausrichtung (Marker)</label>
-                    <p class="form-hint">Beide Marker muessen sichtbar sein. Roboter mittig und gerade vor die Marker stellen, bis unten <strong>AUSGERICHTET</strong> gruen ist - dann speichern. Beim Speichern wird die Andocklinie automatisch an den Markern ausgerichtet.</p>
-                    <div id="dock-align-status" class="coord-display empty">Warte auf Marker ...</div>
                 </div>
 
                 <div class="button-group">
@@ -232,12 +234,16 @@
             </div>
 
             <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable-obstacle-avoidance">
-                    Hinderniserkennung aktivieren
-                </label>
+                <label for="obstacle-mode">Hindernisverhalten</label>
+                <select id="obstacle-mode">
+                    <option value="stop">Anhalten – vor Hindernis stoppen und warten</option>
+                    <option value="avoid">Umfahren – Hindernis automatisch umfahren</option>
+                    <option value="off">Aus – keine Hinderniserkennung (nur Testbetrieb)</option>
+                </select>
                 <p class="form-hint">
-                    Bei Deaktivierung fährt der Roboter ohne Hinderniserkennung und kann mit Hindernissen kollidieren. Dies kann zu Sach- und Personenschäden führen und ist daher nur zu Testzwecken und unter ständiger Aufsicht empfohlen.
+                    <strong>Anhalten:</strong> Der Roboter hält vollständig an, sobald ein Hindernis erkannt wird, und fährt erst weiter, wenn das Hindernis vollständig entfernt wurde.<br>
+                    <strong>Umfahren:</strong> Der Roboter plant einen Weg um das Hindernis herum und setzt die Route fort.<br>
+                    <strong>Aus:</strong> Keine Hinderniserkennung – der Roboter kann mit Hindernissen kollidieren. Dies kann zu Sach- und Personenschäden führen und ist nur zu Testzwecken und unter ständiger Aufsicht empfohlen.
                 </p>
             </div>
 
@@ -561,6 +567,8 @@
     <script src="/static/js/settings.js?v=__APP_VERSION__"></script>
 <!-- Gemeinsame Scripts -->
 <script src="/static/js/common.js?v=__APP_VERSION__"></script>
+    <script src="/static/js/agg-pill.js?v=v2-r28-inaktiv"></script>
+    <script src="/static/js/tm_estop.js?v=v2-r17-1421"></script>
 
 <!-- UI sprint #4: tab switcher for Basic/Advanced. Persists choice in
      localStorage so the operator's tab survives page refresh. -->

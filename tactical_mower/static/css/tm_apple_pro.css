@@ -1,0 +1,550 @@
+/* ============================================================================
+ * tm_apple_pro.css
+ * System-wide Apple-grade polish for all pages (Dashboard, Manuelle Steuerung,
+ * Zeitpläne, Ereignisse, Einstellungen).
+ * Strategy: additive only. Don't remove or rename existing classes/IDs.
+ * Override visual surface — typography, color, spacing, shape, depth.
+ * Load LAST in <head> so we always win the cascade.
+ * ========================================================================== */
+
+/* ============== 1. Design tokens ============== */
+:root {
+    /* Apple system colors */
+    --ap-blue: #007aff;
+    --ap-green: #34c759;
+    --ap-red: #ff3b30;
+    --ap-orange: #ff9500;
+    --ap-yellow: #ffcc00;
+    --ap-purple: #5856d6;
+    --ap-pink: #ff2d55;
+
+    /* Neutral grays */
+    --ap-bg: #f5f5f7;
+    --ap-surface: #ffffff;
+    --ap-tile: #f5f5f7;
+    --ap-ink-1: #1d1d1f;
+    --ap-ink-2: #424245;
+    --ap-ink-3: #6e6e73;
+    --ap-hairline: rgba(0, 0, 0, 0.08);
+    --ap-hairline-strong: rgba(0, 0, 0, 0.12);
+
+    /* Depth */
+    --ap-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --ap-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
+    --ap-shadow-3: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08);
+    --ap-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 36px rgba(0, 0, 0, 0.12);
+
+    /* Radii */
+    --ap-r-sm: 8px;
+    --ap-r-md: 12px;
+    --ap-r-lg: 14px;
+    --ap-r-xl: 18px;
+    --ap-r-pill: 999px;
+}
+
+@media (prefers-color-scheme: dark) {
+    /* Quarero is light-only for now — keep tokens light to match existing photos */
+}
+
+/* ============== 2. Base typography + background ============== */
+html, body {
+    background: var(--ap-bg) !important;
+    color: var(--ap-ink-1) !important;
+    font-family:
+        "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+        "Segoe UI", system-ui, "Helvetica Neue", Arial, "Apple Color Emoji",
+        "Segoe UI Emoji", sans-serif !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+    letter-spacing: -0.005em;
+}
+
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+    font-family: inherit !important;
+    color: var(--ap-ink-1) !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.015em !important;
+    line-height: 1.2 !important;
+}
+
+h1 { font-size: 28px !important; }
+h2 { font-size: 22px !important; }
+h3 { font-size: 18px !important; }
+h4 { font-size: 16px !important; }
+
+p, span, div, li, td, th, label {
+    font-family: inherit !important;
+}
+
+/* Tabular numbers across the app — much better Apple feel */
+.value, .stat-value, .status-value, .telem-value, .t-value,
+.hero-v2-telem-value, .hero-v2-telem-sub,
+#speed-display, #battery-display,
+.tabular,
+[id*="-display"]:not(input):not(textarea),
+[class*="-value"] {
+    font-variant-numeric: tabular-nums !important;
+    font-feature-settings: "tnum" 1 !important;
+}
+
+/* ============== 3. Navbar — Apple-style top bar ============== */
+body .navbar {
+    background: rgba(255, 255, 255, 0.82) !important;
+    -webkit-backdrop-filter: saturate(180%) blur(22px) !important;
+    backdrop-filter: saturate(180%) blur(22px) !important;
+    border-bottom: 0.5px solid var(--ap-hairline) !important;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02) !important;
+    padding: 10px 24px !important;
+    min-height: 56px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 18px !important;
+}
+
+body .navbar .nav-links {
+    display: flex !important;
+    gap: 4px !important;
+    align-items: center !important;
+}
+
+body .navbar .nav-link {
+    color: var(--ap-ink-2) !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+    padding: 7px 14px !important;
+    border-radius: 8px !important;
+    text-decoration: none !important;
+    transition: background 0.14s ease, color 0.14s ease !important;
+    line-height: 1.2 !important;
+}
+
+body .navbar .nav-link:hover {
+    background: rgba(0, 0, 0, 0.04) !important;
+    color: var(--ap-ink-1) !important;
+}
+
+body .navbar .nav-link.active {
+    background: rgba(0, 122, 255, 0.10) !important;
+    color: var(--ap-blue) !important;
+    font-weight: 600 !important;
+}
+
+body .navbar .nav-text {
+    font-family: inherit !important;
+}
+
+body .navbar .navbar-right img {
+    height: 24px !important;
+    width: auto !important;
+}
+
+/* ============== 4. Cards / panels — Apple-style surface ============== */
+.panel,
+.card,
+.tile,
+section.card,
+.control-section,
+.camera-section,
+.scheduler-section,
+.event-card,
+.settings-card,
+.hero-v2-map-wrap,
+.hero-v2-telem-card,
+main.dashboard-v2 .hero-v2-telem-card {
+    background: var(--ap-surface) !important;
+    border-radius: var(--ap-r-xl) !important;
+    border: 0.5px solid var(--ap-hairline) !important;
+    box-shadow: var(--ap-shadow-3) !important;
+}
+
+/* ============== 5. Buttons — pill style ============== */
+button,
+.btn,
+input[type="submit"],
+input[type="button"] {
+    font-family: inherit !important;
+    cursor: pointer !important;
+}
+
+.toggle-button {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: none !important;
+    min-width: 76px !important;
+    height: 32px !important;
+    padding: 0 16px !important;
+    border-radius: var(--ap-r-pill) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    transition: background 0.18s ease, color 0.18s ease, transform 0.08s ease !important;
+}
+.toggle-button.off {
+    background: rgba(120, 120, 128, 0.18) !important;
+    color: var(--ap-ink-1) !important;
+}
+.toggle-button.on {
+    background: var(--ap-green) !important;
+    color: #ffffff !important;
+}
+.toggle-button:active { transform: scale(0.97) !important; }
+
+/* Generic primary button (CTA) */
+.btn-primary,
+button.btn-primary,
+.action-btn-primary,
+button[type="submit"]:not(.estop-btn):not(.toggle-button) {
+    background: var(--ap-blue) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 9px 18px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    transition: filter 0.14s ease, transform 0.08s ease !important;
+}
+.btn-primary:hover,
+button.btn-primary:hover,
+button[type="submit"]:hover:not(.estop-btn):not(.toggle-button) {
+    filter: brightness(1.06) !important;
+}
+.btn-primary:active,
+button.btn-primary:active,
+button[type="submit"]:active:not(.estop-btn):not(.toggle-button) {
+    transform: scale(0.97) !important;
+}
+
+/* Secondary / ghost button */
+.btn-secondary,
+button.btn-secondary,
+.action-btn-secondary {
+    background: rgba(120, 120, 128, 0.12) !important;
+    color: var(--ap-ink-1) !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 9px 18px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+}
+.btn-secondary:hover { background: rgba(120, 120, 128, 0.18) !important; }
+
+/* Destructive button */
+.btn-danger,
+button.btn-danger,
+.action-btn-danger {
+    background: var(--ap-red) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 9px 18px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+}
+
+/* ============== 6. Inputs / selects / textareas ============== */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="time"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="tel"],
+input[type="url"],
+select,
+textarea {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    color: var(--ap-ink-1) !important;
+    background: var(--ap-surface) !important;
+    border: 0.5px solid var(--ap-hairline-strong) !important;
+    border-radius: 10px !important;
+    padding: 9px 12px !important;
+    line-height: 1.3 !important;
+    transition: border-color 0.14s ease, box-shadow 0.14s ease !important;
+}
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none !important;
+    border-color: var(--ap-blue) !important;
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.18) !important;
+}
+select {
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--ap-ink-3) 50%),
+        linear-gradient(135deg, var(--ap-ink-3) 50%, transparent 50%);
+    background-position:
+        calc(100% - 18px) 55%,
+        calc(100% - 13px) 55%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 32px !important;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--ap-blue) !important;
+}
+
+/* iOS-style switch (for any input[type="checkbox"][role="switch"]) */
+input[type="checkbox"][role="switch"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 51px;
+    height: 31px;
+    border-radius: 999px;
+    background: rgba(120, 120, 128, 0.32);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.18s ease;
+    flex-shrink: 0;
+}
+input[type="checkbox"][role="switch"]::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+    transition: transform 0.18s ease;
+}
+input[type="checkbox"][role="switch"]:checked {
+    background: var(--ap-green);
+}
+input[type="checkbox"][role="switch"]:checked::after {
+    transform: translateX(20px);
+}
+
+/* ============== 7. Tables — Apple list style ============== */
+table {
+    width: 100% !important;
+    background: var(--ap-surface) !important;
+    border-radius: var(--ap-r-lg) !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    overflow: hidden !important;
+    border: 0.5px solid var(--ap-hairline) !important;
+}
+thead th {
+    background: rgba(0, 0, 0, 0.025) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: var(--ap-ink-3) !important;
+    text-align: left !important;
+    padding: 10px 14px !important;
+    border-bottom: 0.5px solid var(--ap-hairline) !important;
+}
+tbody td {
+    padding: 12px 14px !important;
+    border-top: 0.5px solid var(--ap-hairline) !important;
+    color: var(--ap-ink-1) !important;
+    font-size: 14px !important;
+}
+tbody tr:first-child td {
+    border-top: none !important;
+}
+
+/* ============== 8. Modal / dialog ============== */
+.modal,
+.dialog,
+.overlay,
+.modal-overlay {
+    background: rgba(0, 0, 0, 0.40) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+    backdrop-filter: blur(6px) !important;
+}
+.modal-content,
+.dialog-content,
+.modal-body,
+.dialog-body {
+    background: var(--ap-surface) !important;
+    border-radius: var(--ap-r-xl) !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25) !important;
+    border: 0.5px solid var(--ap-hairline) !important;
+}
+
+/* ============== 9. Status badges (small pills) ============== */
+.badge,
+.status-badge:not(.estop-btn) {
+    background: rgba(120, 120, 128, 0.12) !important;
+    color: var(--ap-ink-2) !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    padding: 4px 10px !important;
+    border-radius: 999px !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+.badge.ok, .status-badge.ok, .badge-success, .status-success {
+    background: rgba(52, 199, 89, 0.16) !important;
+    color: #157939 !important;
+}
+.badge.warn, .status-badge.warn, .badge-warning, .status-warning {
+    background: rgba(255, 149, 0, 0.16) !important;
+    color: #b25e00 !important;
+}
+.badge.err, .status-badge.err, .badge-error, .status-error,
+.badge.danger, .status-danger {
+    background: rgba(255, 59, 48, 0.14) !important;
+    color: #b8231a !important;
+}
+
+/* ============== 10. Container layout polish ============== */
+.container {
+    max-width: 1320px !important;
+    margin: 0 auto !important;
+    padding: 24px !important;
+}
+
+/* Scrollbars (WebKit / Chromium) — subtle, like macOS */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.28);
+    background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* ============== 11. Focus ring (keyboard nav accessibility) ============== */
+:focus-visible {
+    outline: 3px solid rgba(0, 122, 255, 0.5) !important;
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+
+/* ============== 12. Connection status pill (top-right of navbar) ============== */
+.robot-connection-status {
+    background: rgba(255, 59, 48, 0.12) !important;
+    color: #b8231a !important;
+    border-radius: 999px !important;
+    padding: 4px 12px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border: 0.5px solid rgba(255, 59, 48, 0.30) !important;
+}
+
+/* ============== 13. List items (settings rows, schedule rows) ============== */
+.list-row,
+.settings-row,
+.schedule-row,
+.event-row {
+    background: var(--ap-surface) !important;
+    border-bottom: 0.5px solid var(--ap-hairline) !important;
+    padding: 14px 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 14px !important;
+}
+.list-row:first-child,
+.settings-row:first-child,
+.schedule-row:first-child {
+    border-top-left-radius: var(--ap-r-lg) !important;
+    border-top-right-radius: var(--ap-r-lg) !important;
+}
+.list-row:last-child,
+.settings-row:last-child,
+.schedule-row:last-child {
+    border-bottom-left-radius: var(--ap-r-lg) !important;
+    border-bottom-right-radius: var(--ap-r-lg) !important;
+    border-bottom: none !important;
+}
+
+/* ============== 14. Section header labels (small caps) ============== */
+.section-title,
+.group-title,
+h2.section-heading,
+.label-uppercase {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    color: var(--ap-ink-3) !important;
+}
+
+/* ============== 15. Telemetry cards on dashboard — softer Apple polish ============== */
+main.dashboard-v2 .hero-v2-telem-card {
+    background: var(--ap-surface) !important;
+    border-radius: var(--ap-r-xl) !important;
+    border: 0.5px solid var(--ap-hairline) !important;
+    box-shadow: var(--ap-shadow-3) !important;
+    padding: 16px 18px !important;
+}
+main.dashboard-v2 .hero-v2-telem-label {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    color: var(--ap-ink-3) !important;
+    margin-bottom: 6px !important;
+}
+main.dashboard-v2 .hero-v2-telem-value {
+    color: var(--ap-ink-1) !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.015em !important;
+    font-variant-numeric: tabular-nums !important;
+}
+
+/* ============== 16. Map panel polish ============== */
+.hero-v2-map-wrap,
+#map-panel {
+    border-radius: var(--ap-r-xl) !important;
+    overflow: hidden !important;
+    border: 0.5px solid var(--ap-hairline) !important;
+}
+
+/* ============== 17. Polish for old-style status info (control page etc.) ============== */
+.status-info {
+    background: transparent !important;
+    border: none !important;
+}
+.status-item {
+    background: var(--ap-tile) !important;
+    border-radius: var(--ap-r-lg) !important;
+    padding: 14px 16px !important;
+    border: 0.5px solid var(--ap-hairline) !important;
+}
+.status-label {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: var(--ap-ink-3) !important;
+}
+.status-value {
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    color: var(--ap-ink-1) !important;
+    letter-spacing: -0.01em !important;
+    font-variant-numeric: tabular-nums !important;
+}
+
+/* ============== 18. Hide some legacy borders / heavy backgrounds ============== */
+.container > * {
+    box-shadow: none;
+}
+/* Don't strip if explicitly card — handled above */
+
+/* ============== 19. Smooth all transitions ============== */
+* {
+    -webkit-tap-highlight-color: transparent;
+}

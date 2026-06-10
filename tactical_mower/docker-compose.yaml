@@ -7,6 +7,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.ros2_jetson
     container_name: ros2_jetson
+    privileged: true
     runtime: nvidia        # aktiviert GPU-Zugriff
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
@@ -20,12 +21,13 @@ services:
     devices: 
       - /dev/ttyTHS1:/dev/ttyTHS1  # UART 1
       - /dev/ttyTHS2:/dev/ttyTHS2  # UART 2
-      - /dev/ttyACM0:/dev/ttyACM0  # Roboclaw
+      - /dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_2x15A-if00:/dev/ttyACM0  # Roboclaw (stable udev-by-id; survives USB re-enumeration)
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ./ros2_ws:/app/ros2_ws
       - ../routen:/routen
-    command: bash -c "cd /app/ros2_ws && ./src/fixposition/setup_ros_ws.sh &&  colcon build --build-base build_ros2 --install-base install_ros2 && source /app/ros2_ws/install_ros2/setup.bash && ros2 launch system_bringup controller.launch.py"
+      - ./scripts:/app/scripts:ro
+    command: bash -c "cd /app/ros2_ws && ./src/fixposition/setup_ros_ws.sh &&  colcon build --build-base build_ros2 --install-base install_ros2 && source /app/ros2_ws/install_ros2/setup.bash && /app/scripts/start_extras.sh && ros2 launch system_bringup controller.launch.py"
     tty: true
     restart: unless-stopped
 

@@ -1,0 +1,434 @@
+/* ============================================================================
+ * tm_apple_responsive.css
+ * Comprehensive responsive layer for all pages.
+ * Strategy:
+ *   1) Fluid typography via clamp()
+ *   2) Container/grid breakpoints at iOS / iPad / desktop sizes
+ *   3) Touch targets ≥ 44px everywhere
+ *   4) Modal / popovers go full-bleed on phones
+ *   5) Tables collapse to cards on phones
+ *   6) Navbar: scrollable horizontal pill on small screens
+ * Load LAST so we beat the cascade for sizing.
+ * ========================================================================== */
+
+/* ---------- 1. Viewport-relative root + safer box-sizing ---------- */
+html {
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+}
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+img, svg, video, canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ---------- 2. Fluid type scale (Apple HIG inspired) ---------- */
+body {
+    font-size: clamp(14px, 0.9vw + 13px, 16px) !important;
+    line-height: 1.45 !important;
+}
+h1, .h1 { font-size: clamp(22px, 1.6vw + 14px, 30px) !important; line-height: 1.18 !important; }
+h2, .h2 { font-size: clamp(18px, 1.2vw + 12px, 24px) !important; line-height: 1.22 !important; }
+h3, .h3 { font-size: clamp(16px, 0.7vw + 13px, 19px) !important; line-height: 1.28 !important; }
+
+/* Stat values (Akku, Geschw.) scale fluidly */
+.status-value,
+.t-value,
+.hero-v2-telem-value,
+main.dashboard-v2 .hero-v2-telem-value {
+    font-size: clamp(18px, 1.6vw + 12px, 28px) !important;
+}
+
+/* ---------- 3. Container padding scales with viewport ---------- */
+.container {
+    width: 100% !important;
+    max-width: 1320px !important;
+    margin: 0 auto !important;
+    padding: clamp(12px, 2vw, 24px) !important;
+}
+
+/* ---------- 4. NAVBAR responsive ---------- */
+body .navbar {
+    padding: clamp(8px, 1.4vw, 14px) clamp(12px, 2vw, 24px) !important;
+    gap: clamp(8px, 1vw, 18px) !important;
+    flex-wrap: nowrap !important;   /* never wrap — keeps estop pinned right */
+    align-items: center !important;
+}
+/* Pin estop to the far right of the navbar — never lets the button drift */
+body .navbar #estop-btn,
+body .navbar .estop-btn {
+    margin-left: auto !important;
+    flex-shrink: 0 !important;
+    order: 999 !important;
+}
+/* Logo: pinned LEFT (first element in navbar) */
+body .navbar .navbar-right {
+    flex-shrink: 0 !important;
+    order: 1 !important;
+    margin-right: 8px !important;
+    margin-left: 0 !important;
+}
+body .navbar .nav-links { order: 10 !important; }
+/* Status badges + connection status compress before scrolling */
+body .navbar .nav-status-group,
+body .navbar .robot-connection-status {
+    flex-shrink: 0 !important;
+    order: 100 !important;
+}
+body .navbar .nav-links {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 2px !important;
+}
+body .navbar .nav-links::-webkit-scrollbar { display: none !important; }
+body .navbar .nav-link {
+    padding: clamp(6px, 1vw, 9px) clamp(10px, 1.4vw, 16px) !important;
+    font-size: clamp(12.5px, 0.4vw + 11px, 14px) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+}
+body .navbar .navbar-right img {
+    height: clamp(18px, 2vw, 26px) !important;
+}
+
+/* Hide nav-text line breaks in narrow nav (e.g. "Manuelle\nSteuerung") */
+@media (max-width: 480px) {
+    body .navbar .nav-text br { display: none !important; }
+    body .navbar .nav-text { white-space: nowrap !important; }
+}
+
+/* ---------- 5. DASHBOARD layout: hero map + telem stack ---------- */
+
+/* Desktop default — let existing grid logic apply (do nothing) */
+
+/* Tablet portrait + below: stack telem under map */
+@media (max-width: 900px) {
+    main.dashboard-v2 .hero-v2 {
+        grid-template-columns: 1fr !important;
+        display: grid !important;
+        gap: 14px !important;
+    }
+    main.dashboard-v2 .hero-v2-telem {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+    main.dashboard-v2 .hero-v2-telem-card {
+        flex: 1 1 calc(50% - 8px) !important;
+        min-width: 140px !important;
+    }
+    .hero-v2-map-wrap,
+    #map-panel {
+        aspect-ratio: 16 / 10 !important;
+        height: auto !important;
+        min-height: 320px !important;
+    }
+}
+
+/* Phone: single-column telem too */
+@media (max-width: 560px) {
+    main.dashboard-v2 .hero-v2-telem-card {
+        flex: 1 1 100% !important;
+    }
+    .hero-v2-map-wrap,
+    #map-panel {
+        aspect-ratio: 4 / 3 !important;
+        min-height: 280px !important;
+    }
+}
+
+/* ---------- 6. MANUELLE STEUERUNG responsive ---------- */
+@media (max-width: 960px) {
+    .container {
+        display: block !important;
+    }
+    .camera-section,
+    .control-section {
+        margin-bottom: 16px !important;
+    }
+}
+@media (max-width: 560px) {
+    .camera-switch-buttons {
+        gap: 4px !important;
+        padding: 3px !important;
+    }
+    .camera-switch-btn {
+        font-size: 12px !important;
+        padding: 8px 6px !important;
+    }
+    .status-info {
+        grid-template-columns: 1fr 1fr !important;
+    }
+    .control-btn-group {
+        padding: 12px 14px !important;
+    }
+}
+
+/* ---------- 7. CAMERA PiP / tabs responsive ---------- */
+.hero-v2-camera-tabs,
+.camera-controls {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+}
+.camera-btn,
+.camera-switch-btn {
+    min-height: 36px !important;
+    font-size: clamp(12px, 0.4vw + 10px, 14px) !important;
+    padding: 8px clamp(10px, 1.2vw, 14px) !important;
+}
+
+/* On phones, camera tabs scroll horizontally instead of wrapping */
+@media (max-width: 560px) {
+    .hero-v2-camera-tabs,
+    .camera-controls {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        padding-bottom: 4px !important;
+    }
+    .hero-v2-camera-tabs::-webkit-scrollbar,
+    .camera-controls::-webkit-scrollbar { display: none !important; }
+    .camera-btn,
+    .camera-switch-btn {
+        flex-shrink: 0 !important;
+    }
+}
+
+/* ---------- 8. MAP control pill: bigger touch targets on touch devices ---------- */
+@media (hover: none) and (pointer: coarse) {
+    .hero-v2-map-controls {
+        width: 48px !important;
+        min-width: 48px !important;
+    }
+    .hero-v2-map-controls .hero-v2-map-btn,
+    .hero-v2-map-controls .leaflet-control-layers,
+    .hero-v2-map-controls .leaflet-control-layers-toggle {
+        width: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
+        height: 48px !important;
+    }
+}
+
+/* ---------- 9. ESTOP button on small screens (stay pinned right) ---------- */
+@media (max-width: 720px) {
+    body .navbar .estop-btn {
+        min-height: 40px !important;
+        height: 40px !important;
+        padding: 0 14px !important;
+        font-size: 12.5px !important;
+        margin-left: auto !important;
+        flex-shrink: 0 !important;
+    }
+    body .navbar .estop-btn .estop-icon { font-size: 16px !important; }
+    body .navbar .estop-btn .estop-label { letter-spacing: 0.02em !important; }
+    /* Logo stays visible on the LEFT — shrink instead of hiding */
+    body .navbar .navbar-right img { height: 20px !important; }
+}
+@media (max-width: 380px) {
+    /* Very narrow: hide logo only if we really run out of room */
+    body .navbar .navbar-right { display: none !important; }
+}
+@media (max-width: 480px) {
+    /* Compact: hide the connection-status pill in the navbar (covered by toast) */
+    body .navbar .robot-connection-status { display: none !important; }
+    body .navbar .estop-btn {
+        padding: 0 11px !important;
+        gap: 5px !important;
+    }
+    body .navbar .estop-btn .estop-label { font-size: 11.5px !important; }
+}
+@media (max-width: 380px) {
+    /* Ultra-narrow: estop becomes icon-only circle */
+    body .navbar .estop-btn .estop-label { display: none !important; }
+    body .navbar .estop-btn {
+        width: 40px !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+    }
+}
+
+/* ---------- 10. TABLES collapse to card list on phones ---------- */
+@media (max-width: 640px) {
+    table.responsive-cards,
+    table[data-responsive="cards"],
+    .events-table,
+    .schedules-table {
+        display: block !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    table.responsive-cards thead,
+    table[data-responsive="cards"] thead,
+    .events-table thead,
+    .schedules-table thead {
+        display: none !important;
+    }
+    table.responsive-cards tbody,
+    table[data-responsive="cards"] tbody,
+    .events-table tbody,
+    .schedules-table tbody {
+        display: block !important;
+    }
+    table.responsive-cards tr,
+    table[data-responsive="cards"] tr,
+    .events-table tr,
+    .schedules-table tr {
+        display: block !important;
+        background: #fff !important;
+        border: 0.5px solid rgba(0, 0, 0, 0.08) !important;
+        border-radius: 14px !important;
+        padding: 12px 14px !important;
+        margin-bottom: 10px !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+    }
+    table.responsive-cards td,
+    table[data-responsive="cards"] td,
+    .events-table td,
+    .schedules-table td {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        border-top: none !important;
+        padding: 6px 0 !important;
+    }
+    table.responsive-cards td::before,
+    table[data-responsive="cards"] td::before,
+    .events-table td::before,
+    .schedules-table td::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #6e6e73;
+    }
+}
+
+/* ---------- 11. MODAL / dialog go full-bleed on phones ---------- */
+@media (max-width: 640px) {
+    .modal-content,
+    .dialog-content,
+    .modal-body,
+    .dialog-body {
+        border-radius: 16px 16px 0 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: 92svh !important;
+        margin: auto 0 0 0 !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+    }
+}
+
+/* ---------- 12. Camera fullscreen modal — keep tabs accessible ---------- */
+#camera-container:fullscreen .hero-v2-camera-tabs,
+#camera-container:-webkit-full-screen .hero-v2-camera-tabs {
+    max-width: 92vw !important;
+    overflow-x: auto !important;
+}
+
+/* ---------- 13. Map fullscreen: tighter inset on small screens ---------- */
+@media (max-width: 560px) {
+    body.map-fullscreen-active #map-panel.map-fullscreen .hero-v2-map-controls {
+        top: 12px !important;
+        right: 12px !important;
+    }
+}
+
+/* ---------- 14. iOS safe-area insets (notch, home indicator) ---------- */
+@supports (padding: max(0px)) {
+    body {
+        padding-left: env(safe-area-inset-left, 0px) !important;
+        padding-right: env(safe-area-inset-right, 0px) !important;
+    }
+    body .navbar {
+        padding-top: max(env(safe-area-inset-top, 0px), 10px) !important;
+    }
+    body.map-fullscreen-active #map-panel.map-fullscreen .hero-v2-map-controls {
+        top: max(env(safe-area-inset-top, 0px), 16px) !important;
+        right: max(env(safe-area-inset-right, 0px), 16px) !important;
+    }
+}
+
+/* ---------- 15. Use dynamic viewport height to handle mobile URL bar ---------- */
+@supports (height: 100dvh) {
+    body.map-fullscreen-active #map-panel.map-fullscreen,
+    body.map-fullscreen-active #map-panel.map-fullscreen #map {
+        height: 100dvh !important;
+    }
+    body.map-fullscreen-active main.dashboard-v2,
+    body.map-fullscreen-active main.dashboard-v2 .hero-v2 {
+        height: 100dvh !important;
+    }
+}
+
+/* ---------- 16. Form inputs scale up on small screens (avoid iOS zoom-on-focus) ---------- */
+@media (max-width: 640px) {
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="time"],
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="tel"],
+    select,
+    textarea {
+        font-size: 16px !important;   /* iOS won't auto-zoom if font-size ≥ 16 */
+        padding: 10px 12px !important;
+    }
+}
+
+/* ---------- 17. Buttons: minimum touch target on touch devices ---------- */
+@media (hover: none) and (pointer: coarse) {
+    button,
+    .btn,
+    .nav-link,
+    .toggle-button {
+        min-height: 44px !important;
+    }
+    .toggle-button {
+        height: 44px !important;
+        min-width: 88px !important;
+    }
+}
+
+/* ---------- 18. Ticker / activity log responsive (don't overflow on mobile) ---------- */
+.ticker,
+#ticker,
+.activity-log,
+.live-log {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+}
+
+/* ---------- 19. Connection-status pill ---------- */
+@media (max-width: 480px) {
+    .robot-connection-status {
+        font-size: 11px !important;
+        padding: 3px 9px !important;
+    }
+}
+
+/* ---------- 20. Reduced-motion respect ---------- */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

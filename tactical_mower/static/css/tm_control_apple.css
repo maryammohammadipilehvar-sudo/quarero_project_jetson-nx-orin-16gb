@@ -1,0 +1,315 @@
+/* ============================================================================
+ * tm_control_apple.css
+ * Apple-grade redesign of /control (Manuelle Steuerung).
+ *   - Hides the on-screen joystick (use keyboard WASD or PS5 controller instead)
+ *   - iOS-grade layout: hero camera, segmented camera switcher, stat tiles,
+ *     large pill toggle buttons.
+ *   - SF Pro font stack, system colors, generous spacing.
+ * Load LAST in /control.html so it wins the cascade.
+ * ========================================================================== */
+
+/* ============== System font ============== */
+body {
+    font-family:
+        "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+        "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    background: #f5f5f7 !important;
+    color: #1d1d1f !important;
+}
+
+/* ============== HIDE the on-screen joystick widget entirely ============== */
+.joystick-container,
+.control-section h2,
+.speed-display {
+    display: none !important;
+}
+
+/* ============== Page container: clean Apple grid ============== */
+.container {
+    max-width: 1280px !important;
+    margin: 0 auto !important;
+    padding: 32px 24px 48px !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr) !important;
+    gap: 24px !important;
+    align-items: start !important;
+}
+
+@media (max-width: 960px) {
+    .container {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ============== Camera card (hero) ============== */
+.camera-section {
+    background: #ffffff !important;
+    border-radius: 18px !important;
+    padding: 18px !important;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 8px 24px rgba(0, 0, 0, 0.06) !important;
+    border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+.camera-section h2 {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    color: #6e6e73 !important;
+    margin: 4px 4px 14px !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.camera-section .camera-container,
+.camera-container {
+    background: #000 !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    aspect-ratio: 16 / 9 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+    box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.4) !important;
+}
+
+#camera-feed {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+#camera-placeholder.camera-placeholder {
+    color: rgba(255, 255, 255, 0.55) !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}
+
+/* ============== Camera switch buttons — iOS segmented control ============== */
+.camera-switch-buttons {
+    display: flex !important;
+    gap: 6px !important;
+    margin-top: 14px !important;
+    padding: 4px !important;
+    background: rgba(120, 120, 128, 0.12) !important;
+    border-radius: 12px !important;
+}
+
+.camera-switch-btn {
+    flex: 1 1 0 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: none !important;
+    background: transparent !important;
+    color: #1d1d1f !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    padding: 9px 10px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease !important;
+    min-height: 36px !important;
+    white-space: nowrap !important;
+}
+
+.camera-switch-btn:hover {
+    background: rgba(255, 255, 255, 0.5) !important;
+}
+
+.camera-switch-btn.active {
+    background: #ffffff !important;
+    color: #1d1d1f !important;
+    box-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.04),
+        0 3px 8px rgba(0, 0, 0, 0.12) !important;
+    font-weight: 600 !important;
+}
+
+/* ============== Right column: clean control card ============== */
+.control-section {
+    background: #ffffff !important;
+    border-radius: 18px !important;
+    padding: 22px !important;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 8px 24px rgba(0, 0, 0, 0.06) !important;
+    border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 18px !important;
+}
+
+/* Stat tiles row */
+.status-info {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+}
+
+.status-item {
+    background: #f5f5f7 !important;
+    border-radius: 14px !important;
+    padding: 14px 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    border: 0.5px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.status-label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: #6e6e73 !important;
+}
+
+.status-value {
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    color: #1d1d1f !important;
+    letter-spacing: -0.01em !important;
+    font-variant-numeric: tabular-nums !important;
+}
+
+/* Bigger heading replaced — but keep it elegant if visible elsewhere */
+.control-section > * + * {
+    margin-top: 0 !important;
+}
+
+/* Control grid: collapses to one column (joystick is hidden) */
+.control-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+}
+
+/* Control buttons stack */
+.control-buttons {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.control-btn-group {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+    background: #f5f5f7 !important;
+    border-radius: 14px !important;
+    padding: 12px 16px !important;
+    border: 0.5px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.control-btn-label {
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    color: #1d1d1f !important;
+}
+
+/* iOS-style toggle pill */
+.toggle-button {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: none !important;
+    cursor: pointer !important;
+    min-width: 76px !important;
+    height: 32px !important;
+    padding: 0 16px !important;
+    border-radius: 999px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.01em !important;
+    transition: background 0.18s ease, color 0.18s ease, transform 0.08s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.toggle-button.off {
+    background: rgba(120, 120, 128, 0.18) !important;
+    color: #1d1d1f !important;
+}
+
+.toggle-button.on {
+    background: #34c759 !important;
+    color: #ffffff !important;
+}
+
+.toggle-button:hover {
+    filter: brightness(0.97) !important;
+}
+
+.toggle-button:active {
+    transform: scale(0.97) !important;
+}
+
+/* The autonomous button is unlabeled in markup — give it a label via ::before */
+#autonomous-btn::before { content: none !important; }
+
+.control-btn-group:has(#autonomous-btn)::before {
+    content: "Autonomie";
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    color: #1d1d1f !important;
+    flex: 1 1 auto;
+}
+.control-btn-group:has(#autonomous-btn) .control-btn-label {
+    /* fallback — keep original label hidden if present */
+    display: none !important;
+}
+
+/* ============== Keyboard hint banner ============== */
+.control-section::after {
+    content: "Steuerung mit  W A S D  oder Pfeiltasten · PS5-Controller (L1 + linker Stick)";
+    display: block;
+    margin-top: 6px;
+    padding: 12px 16px;
+    background: rgba(0, 122, 255, 0.08);
+    border: 0.5px solid rgba(0, 122, 255, 0.18);
+    border-radius: 14px;
+    color: #0a64c8;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.45;
+    letter-spacing: 0.01em;
+    text-align: center;
+}
+
+/* ============== Polish: hide leftover artifacts ============== */
+.connection-status,
+#connection-status {
+    /* Keep but tame; render only when meaningful */
+    font-size: 12px !important;
+}
+
+/* === Hard-kill the joystick widget (duplicate of keyboard/PS5 input) === */
+body .container .control-section .joystick-container,
+body .container .joystick-container,
+.joystick-container,
+.joystick-wrapper,
+.joystick-base,
+.joystick-stick,
+.joystick-center,
+.joystick-direction,
+.joystick-label,
+.speed-display {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    pointer-events: none !important;
+}

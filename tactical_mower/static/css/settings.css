@@ -249,26 +249,6 @@ html, body {
             font-style: italic;
         }
 
-        /* Dock-Ausrichtung (Marker) live status — keeps the muted coord-display
-           box and adds a left-border accent + faint tint per state, matching the
-           .success-message convention used elsewhere on this page (no loud
-           full-colour fills). State classes are set by updateDockAlign() in settings.js. */
-        .coord-display.dock-aligned {
-            border-left: 4px solid #4CAF50;
-            background: #f0fff0;
-            color: #1b5e20;
-            font-weight: 600;
-            font-style: normal;
-        }
-
-        .coord-display.dock-pending {
-            border-left: 4px solid #ff9800;
-            background: #fff8f0;
-            color: #b35900;
-            font-weight: 600;
-            font-style: normal;
-        }
-
         /* TABLET (ab 768px) */
         @media (min-width: 768px) {
             .container {

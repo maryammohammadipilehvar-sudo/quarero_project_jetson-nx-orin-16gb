@@ -34,7 +34,7 @@ from .utils.connection_manager import ConnectionManager
 
 # API Routes
 from .api.routes import routes, control, settings, scheduler, events, security_arrival
-from .api.websockets import camera, position, robot_state, dock_align
+from .api.websockets import camera, position, robot_state
 
 # Global instances
 ros_node: RobotNode = None
@@ -407,13 +407,6 @@ async def websocket_robot_state_endpoint(websocket: WebSocket):
     """Robot state WebSocket endpoint"""
     global ros_node
     await robot_state.websocket_robot_state(websocket, ros_node)
-
-
-@app.websocket("/ws/dock_align")
-async def websocket_dock_align_endpoint(websocket: WebSocket):
-    """Live dock-alignment WebSocket endpoint (for the dock-setup tool)"""
-    global ros_node
-    await dock_align.websocket_dock_align(websocket, ros_node)
 
 
 # Logs API

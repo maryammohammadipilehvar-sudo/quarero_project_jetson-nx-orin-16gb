@@ -36,7 +36,7 @@ class RobotNode(Node):
         self._publisher_methods = PublisherMethods(self, self.status_manager)
 
         # Declare topic parameters
-        self.declare_parameter('topics.camera', '/camera/camera/color/image_raw')
+        self.declare_parameter('topics.camera', '/oak/rgb/image_raw')
         self.declare_parameter('topics.waypoint_pub', '/geopath')
         self.declare_parameter('topics.light_pub', '/control/light')
         self.declare_parameter('topics.alarm_pub', '/control/alarm')

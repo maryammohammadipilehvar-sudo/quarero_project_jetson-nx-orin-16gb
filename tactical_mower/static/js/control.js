@@ -251,6 +251,7 @@
             
             // Create new WebSocket connection
             wsCamera = new WebSocket(`ws://${window.location.host}/ws/camera/${cameraType}`);
+            wsCamera.binaryType = 'arraybuffer';
             
             wsCamera.onopen = () => {
                 updateConnectionStatus(true);
@@ -263,6 +264,18 @@
             };
             
             wsCamera.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+                    const blobB = event.data instanceof Blob ? event.data : new Blob([event.data], { type: 'image/jpeg' });
+                    const urlB = URL.createObjectURL(blobB);
+                    const containerB = document.getElementById('camera-container');
+                    const imgB = document.getElementById('camera-feed');
+                    if (imgB) imgB.src = urlB;
+                    if (containerB) containerB.classList.add('has-frame');
+                    lastCameraFrameTime = Date.now();
+                    if (wsCamera._prevUrl) URL.revokeObjectURL(wsCamera._prevUrl);
+                    wsCamera._prevUrl = urlB;
+                    return;
+                }
                 const data = JSON.parse(event.data);
                 if (data.type === 'camera') {
                     // Skip old frames if timestamp is available

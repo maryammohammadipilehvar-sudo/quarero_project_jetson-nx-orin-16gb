@@ -26,6 +26,39 @@
         let lightPending = false;
         let autonomousOperationEnabled = false;
         let currentCameraStream = 'main';
+        // Camera quality toggle (fullscreen only). Default SD for CPU/bandwidth saving.
+        let cameraQuality = 'low';
+        function setCameraQuality(q) {
+            if (q !== 'high' && q !== 'low') return;
+            if (cameraQuality === q) return;
+            cameraQuality = q;
+            const root = document.getElementById('camera-quality-toggle');
+            if (root) {
+                root.dataset.quality = q;
+                root.querySelectorAll('.cam-q-seg').forEach(function(s){
+                    s.classList.toggle('active', s.dataset.q === q);
+                });
+            }
+            if (typeof wsCamera !== 'undefined' && wsCamera) {
+                wsCamera.onclose = null; wsCamera.onerror = null; wsCamera.onmessage = null;
+                try { wsCamera.close(); } catch (e) {}
+                wsCamera = null;
+            }
+            setTimeout(function(){ if (typeof connectCameraWebSocket === 'function') connectCameraWebSocket(); }, 60);
+        }
+        function updateQualityToggleVisibility() {
+            const root = document.getElementById('camera-quality-toggle');
+            if (!root) return;
+            const show = (typeof isCameraModalOpen !== 'undefined' && isCameraModalOpen) &&
+                         (currentCameraStream === 'thermal2' || currentCameraStream === 'rgb2' || currentCameraStream === 'main' || currentCameraStream === 'person_detection');
+            root.classList.toggle('visible', show);
+            if (!show) {
+                root.dataset.quality = 'low';
+                root.querySelectorAll('.cam-q-seg').forEach(function(s){
+                    s.classList.toggle('active', s.dataset.q === 'low');
+                });
+            }
+        }
         let wsCamera = null;
         let isSwitchingCamera = false; // Flag to prevent auto-reconnect during camera switch
         let lastErrorTime = {};
@@ -955,6 +988,8 @@
             modalTitle.textContent = cameraNames[currentCameraStream] || 'Kamera';
             modal.classList.add('active');
             isCameraModalOpen = true;
+            cameraQuality = 'low';
+            if (typeof updateQualityToggleVisibility === 'function') updateQualityToggleVisibility();
         }
 
         function closeCameraModal() {
@@ -969,6 +1004,15 @@
             feed.style.objectFit = '';
             modal.classList.remove('active');
             isCameraModalOpen = false;
+            const _wasHQ = cameraQuality === 'high';
+            cameraQuality = 'low';
+            if (typeof updateQualityToggleVisibility === 'function') updateQualityToggleVisibility();
+            if (_wasHQ && typeof wsCamera !== 'undefined' && wsCamera) {
+                wsCamera.onclose = null; wsCamera.onerror = null; wsCamera.onmessage = null;
+                try { wsCamera.close(); } catch (e) {}
+                wsCamera = null;
+                setTimeout(function(){ if (typeof connectCameraWebSocket === 'function') connectCameraWebSocket(); }, 60);
+            }
         }
 
         function openCameraStream(stream, btn) {
@@ -1019,6 +1063,8 @@
     isSwitchingCamera = true;
 
     currentCameraStream = stream;
+    cameraQuality = 'low';
+    if (typeof updateQualityToggleVisibility === 'function') updateQualityToggleVisibility();
 
     // Alle Buttons als inaktiv markieren
     document.querySelectorAll('.camera-btn').forEach(b => {
@@ -1107,7 +1153,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        const wsUrl = `ws://${window.location.host}/ws/camera/${currentCameraStream}`;
+        const _qp = (cameraQuality === 'high' && (currentCameraStream === 'thermal2' || currentCameraStream === 'rgb2' || currentCameraStream === 'main' || currentCameraStream === 'person_detection')) ? '?quality=high' : '';
+        const wsUrl = `ws://${window.location.host}/ws/camera/${currentCameraStream}${_qp}`;
         console.log('Connecting to camera WebSocket:', wsUrl);
         
         // Make sure old connection is closed

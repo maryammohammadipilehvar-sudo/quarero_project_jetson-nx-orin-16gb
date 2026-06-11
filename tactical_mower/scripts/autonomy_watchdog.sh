@@ -2,7 +2,7 @@
 # Watchdog: keeps the autonomy_supervisor alive. If it dies, restart it within 2s.
 # Defensive: on watchdog exit, resume all autonomy nodes (safety net).
 
-NODES='livox_obstacle_node simple_obstacle_detector'
+NODES="livox_obstacle_node simple_obstacle_detector livox_ros_driver2_node tactical_wp_follower nav2_navigation_node"
 
 resume_all() {
   for PAT in $NODES; do

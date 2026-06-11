@@ -108,6 +108,11 @@ async def websocket_camera_main(websocket: WebSocket, ros_node: RobotNode):
     FIX: Removed re-check after processing that caused frames to be skipped indefinitely"""
     await websocket.accept()
     camera_type = 'main'
+    # Quality: default LQ (CPU/bandwidth saver). Fullscreen UI may request ?quality=high.
+    _hq = websocket.query_params.get('quality') == 'high'
+    _max_w = WEB_STREAM_MAX_WIDTH if _hq else THERMAL_STREAM_MAX_WIDTH
+    _max_h = WEB_STREAM_MAX_HEIGHT if _hq else THERMAL_STREAM_MAX_HEIGHT
+    _jq = 70 if _hq else 35
     # Register this stream as active and add this connection
     ros_node.connection_manager.register_camera_stream(camera_type)
     ros_node.connection_manager.add_camera_connection(camera_type, websocket)
@@ -135,20 +140,15 @@ async def websocket_camera_main(websocket: WebSocket, ros_node: RobotNode):
                 
                 try:
                     # Process frame asynchronously (non-blocking - runs in thread pool)
-                    jpg_base64 = await _process_frame_async(
-                        frame, 
+                    jpeg_bytes = await _process_frame_to_bytes_async(
+                        frame,
                         camera_type='main',
-                        max_width=WEB_STREAM_MAX_WIDTH,
-                        max_height=WEB_STREAM_MAX_HEIGHT,
-                        jpeg_quality=70
+                        max_width=_max_w,
+                        max_height=_max_h,
+                        jpeg_quality=_jq
                     )
-                    # SEND the processed frame immediately - do NOT skip it
-                    # The frame was the newest when we grabbed it
-                    if jpg_base64:
-                        await websocket.send_json({
-                            "type": "camera",
-                            "data": jpg_base64
-                        })
+                    if jpeg_bytes:
+                        await websocket.send_bytes(jpeg_bytes)
                         last_sent_frame_time = asyncio.get_event_loop().time()
                         last_sent_frame_timestamp = frame_timestamp
                 except (ConnectionClosedOK, ConnectionClosedError, WebSocketDisconnect):
@@ -159,7 +159,7 @@ async def websocket_camera_main(websocket: WebSocket, ros_node: RobotNode):
                     logger.warning(f'Frame processing/sending error (non-blocking): {e}', exc_info=True)
             else:
                 # No new frame available yet, wait a bit before checking again
-                await asyncio.sleep(0.033)  # Check at ~30Hz when no frames
+                await asyncio.sleep(0.005)  # main: fast pickup for manual control
     except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
         # Normal WebSocket close - not an error
         logger.debug(f'Camera WebSocket disconnected normally: {camera_type}')
@@ -446,6 +446,10 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
     """Person detection WebSocket - reads MJPEG from live_detect.py port 8080"""
     await websocket.accept()
     camera_type = 'person_detection'
+    # Quality: default LQ (forward every 2nd frame to halve bandwidth). HQ = passthrough.
+    _hq = websocket.query_params.get('quality') == 'high'
+    _frame_skip = 1 if _hq else 2
+    _pd_counter = 0
     ros_node.connection_manager.register_camera_stream(camera_type)
     ros_node.connection_manager.add_camera_connection(camera_type, websocket)
 
@@ -512,6 +516,9 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
             jpeg_bytes = await loop.run_in_executor(_image_executor, frame_queue.get, True, 5.0)
             if jpeg_bytes is None:
                 break
+            _pd_counter += 1
+            if _frame_skip > 1 and (_pd_counter % _frame_skip) != 0:
+                continue
             await websocket.send_bytes(jpeg_bytes)
     except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
         logger.debug('Person detection WebSocket closed')

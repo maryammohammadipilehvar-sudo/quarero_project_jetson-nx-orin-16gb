@@ -6,7 +6,7 @@
     <title>Dashboard – Robotersteuerung</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="/static/css/common.css?v=v2-r17-1421" />
-    <link rel="stylesheet" href="/static/css/index.css?v=v2-r17-1421" />
+    <link rel="stylesheet" href="/static/css/index.css?v=v2-r25-quality" />
     <link rel="stylesheet" href="/static/css/tm_dash-v2.css?v=v2-r17-1421" />
     <link rel="stylesheet" href="/static/css/tm_v2_polish.css?v=v2-r17-1421" />
     <link rel="stylesheet" href="/static/css/tm_v2_estop_fix.css?v=v2-r17-1421" />
@@ -16,7 +16,69 @@
     <link rel="stylesheet" href="/static/css/tm_map_fullscreen_pro.css?v=v2-r24-clean" />
     <link rel="stylesheet" href="/static/css/tm_map_controls_apple.css?v=v2-r27-listpop" />
     <link rel="stylesheet" href="/static/css/tm_apple_pro.css?v=v2-r22-applepro" />
-    <link rel="stylesheet" href="/static/css/tm_apple_responsive.css?v=v2-r31-logoleft" />
+    <link rel="stylesheet" href="/static/css/tm_apple_responsive.css?v=v2-r32-mobnav" />
+    <style id="tm-quality-toggle-style">
+      /* Apple-style HQ/SD quality toggle for camera fullscreen */
+      #camera-modal { position: relative; }
+      .cam-quality-toggle {
+        position: absolute;
+        bottom: 28px;
+        left: 50%;
+        display: inline-flex;
+        align-items: center;
+        padding: 4px;
+        background: rgba(28, 28, 30, 0.72);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        backdrop-filter: blur(24px) saturate(180%);
+        border: 0.5px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.06);
+        z-index: 60;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+        user-select: none; -webkit-user-select: none;
+        transform: translate(-50%, 8px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms cubic-bezier(0.32,0.72,0,1), transform 260ms cubic-bezier(0.32,0.72,0,1);
+      }
+      .cam-quality-toggle.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translate(-50%, 0);
+      }
+      .cam-quality-toggle .cam-q-seg {
+        position: relative; z-index: 2;
+        appearance: none; -webkit-appearance: none;
+        border: 0; background: transparent;
+        color: rgba(255,255,255,0.62);
+        min-width: 58px;
+        padding: 8px 20px;
+        font-size: 13px; font-weight: 600; letter-spacing: 0.5px;
+        border-radius: 999px;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition: color 200ms cubic-bezier(0.32,0.72,0,1), transform 120ms ease;
+      }
+      .cam-quality-toggle .cam-q-seg:focus-visible {
+        outline: 1.5px solid rgba(0,122,255,0.7); outline-offset: 1px;
+      }
+      .cam-quality-toggle .cam-q-seg.active { color: #fff; }
+      .cam-quality-toggle .cam-q-seg:active { transform: scale(0.96); }
+      .cam-quality-toggle .cam-q-thumb {
+        position: absolute;
+        top: 4px; bottom: 4px; left: 4px;
+        width: calc(50% - 4px);
+        background: linear-gradient(180deg, rgba(255,255,255,0.20), rgba(255,255,255,0.08));
+        border-radius: 999px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.18);
+        transition: transform 320ms cubic-bezier(0.32,0.72,0,1);
+        pointer-events: none; z-index: 1;
+      }
+      .cam-quality-toggle[data-quality="high"] .cam-q-thumb { transform: translateX(100%); }
+      .cam-quality-toggle[data-quality="high"] .cam-q-seg[data-q="high"] {
+        text-shadow: 0 0 14px rgba(255,255,255,0.4);
+      }
+    </style>
 </head>
 <body>
     <div class="navbar">
@@ -313,11 +375,16 @@
             <span id="camera-modal-title">Kamera</span>
             <button class="camera-modal-close" onclick="event.stopPropagation(); closeCameraModal()">✕</button>
         </div>
+        <div id="camera-quality-toggle" class="cam-quality-toggle" data-quality="low" onclick="event.stopPropagation()" role="group" aria-label="Bildqualität">
+            <span class="cam-q-thumb" aria-hidden="true"></span>
+            <button type="button" class="cam-q-seg active" data-q="low" onclick="event.stopPropagation(); setCameraQuality('low')" aria-label="Standard-Qualität, spart CPU und Daten">SD</button>
+            <button type="button" class="cam-q-seg" data-q="high" onclick="event.stopPropagation(); setCameraQuality('high')" aria-label="Hohe Qualität, mehr CPU und Daten">HD</button>
+        </div>
         <div id="camera-modal-feed-wrapper" style="display:flex;align-items:center;justify-content:center;flex:1;padding-top:48px;width:100%;height:100%;"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/js/index.js?v=v2-r17-1421"></script>
+    <script src="/static/js/index.js?v=v2-r25-quality"></script>
     <script src="/static/js/common.js?v=v2-r17-1421"></script>
     <script src="/static/js/tm_estop.js?v=v2-r17-1421"></script>
     <script src="/static/js/agg-pill.js?v=v2-r28-inaktiv"></script>

@@ -255,11 +255,14 @@ class RobotNode(Node):
         self.siren_pub = self.create_publisher(Bool, siren_topic, 10)
         self.move_pub = self.create_publisher(Point, move_topic, 10)
         self.emergency_stop_pub = self.create_publisher(Bool, emergency_stop_topic, 10)
+        # joy_qos reverted 2026-06-10
+        # joy_qos reverted to default depth=10
         self.joy_web_pub = self.create_publisher(Joy, joy_web_topic, 10)
         self.set_speed_pub = self.create_publisher(Float32, set_speed_topic, 10)
         self.autonomous_operation_pub = self.create_publisher(Bool, autonomous_operation_topic, 10)
         latched_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.obstacle_avoidance_pub = self.create_publisher(Bool, '/control/obstacle_avoidance_enabled', latched_qos)
+        self.obstacle_mode_pub = self.create_publisher(String, '/control/obstacle_mode', latched_qos)
         self.speed_factor = 1.0
 
         # Schedule Publishers
@@ -297,8 +300,11 @@ class RobotNode(Node):
             settings = load_settings()
             self.speed_factor = float(settings.get("speed_factor", 1.0))
             self._publisher_methods.publish_speed_factor(self.speed_factor)
-            obstacle_avoidance_enabled = settings.get("enable_obstacle_avoidance", True)
-            self._publisher_methods.publish_obstacle_avoidance_enabled(obstacle_avoidance_enabled)
+            obstacle_mode = settings.get("obstacle_mode")
+            if not (isinstance(obstacle_mode, str) and obstacle_mode.lower() in ("off", "stop", "avoid")):
+                # Fall back to the legacy boolean, defaulting to the protective stop.
+                obstacle_mode = "off" if settings.get("enable_obstacle_avoidance") is False else "stop"
+            self._publisher_methods.publish_obstacle_mode(obstacle_mode.lower())
         except Exception as e:
             self.get_logger().error(f"Failed to initialize speed factor from settings: {e}")
 
@@ -508,8 +514,18 @@ class RobotNode(Node):
         return await self._publisher_methods.call_siren_service(state, command_id)
     
     async def trigger_emergency_stop_service(self, state: bool, command_id: str = None) -> Dict:
-        """Trigger emergency stop via service."""
-        return await self._publisher_methods.call_emergency_stop_service(state, command_id)
+        # ESTOP_UI_SYNC_PATCH_v1
+        """Trigger emergency stop via service.
+
+        Dispatches through the status-aware helpers so
+        status_manager.emergency_active stays in sync with the UI button.
+        Previously called call_emergency_stop_service directly which did
+        the ROS service call but skipped the state update -> button never
+        toggled in the dashboard.
+        """
+        if state:
+            return await self._publisher_methods.trigger_emergency_stop(command_id)
+        return await self._publisher_methods.clear_emergency_stop(command_id)
     
     async def set_autonomous_operation(self, enabled: bool, command_id: str = None) -> Dict:
         """Set autonomous operation via service."""
@@ -544,6 +560,9 @@ class RobotNode(Node):
 
     def publish_obstacle_avoidance_enabled(self, enabled: bool) -> None:
         self._publisher_methods.publish_obstacle_avoidance_enabled(enabled)
+
+    def publish_obstacle_mode(self, mode: str) -> None:
+        self._publisher_methods.publish_obstacle_mode(mode)
 
     def send_move_command(self, x: float, y: float) -> None:
         self._publisher_methods.send_move_command(x, y)

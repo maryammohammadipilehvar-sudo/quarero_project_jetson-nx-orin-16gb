@@ -56,6 +56,14 @@ _ingest_token: str = ""
 
 # Idempotency cache: (source, track_id, ts_minute) → event_id, monotonic_t
 _IDEMPOTENCY_TTL_S = 120.0
+# ARRIVAL_COOLDOWN_PATCH_v1 module-level cooldown state
+# Per-class cooldown for the heavy ringbuffer capture call. Idempotency
+# alone is not enough - a busy detector reuses class_label "person" with
+# fresh track_ids every few seconds, bypassing the (source, track_id, minute)
+# key. The cooldown is class-wide and only gates the capture step; the
+# event metadata and the operator notification still go out.
+_CAPTURE_COOLDOWN_S = 60.0
+_last_capture_by_class: dict[str, float] = {}
 _idempotency_cache: dict[tuple, tuple[str, float]] = {}
 
 
@@ -284,8 +292,20 @@ async def receive_arrival(request: Request):
 
     # 2. Fire clip capture in BACKGROUND — don't block the response.
     #    asyncio.create_task runs concurrently with subsequent requests.
-    asyncio.create_task(_capture_clip_background(event_id, ts_dt, pre_s, post_s))
-    actions.append("clip_capture_queued")
+    # ARRIVAL_COOLDOWN_PATCH_v1 per-class cooldown gate
+    _cd_now = time.monotonic()
+    _cd_last = _last_capture_by_class.get(class_label, 0.0)
+    if (_cd_now - _cd_last) < _CAPTURE_COOLDOWN_S:
+        _cd_remaining = _CAPTURE_COOLDOWN_S - (_cd_now - _cd_last)
+        log.info("arrival %s: clip capture skipped - class %s in cooldown for %.1fs more", event_id, class_label, _cd_remaining)
+        metadata["clip_status"] = "cooldown_skipped"
+        metadata["clip_cooldown_remaining_s"] = round(_cd_remaining, 1)
+        _event_repo.save_event(metadata)
+        actions.append(f"clip_capture_skipped:cooldown_{int(_cd_remaining)}s")
+    else:
+        _last_capture_by_class[class_label] = _cd_now
+        asyncio.create_task(_capture_clip_background(event_id, ts_dt, pre_s, post_s))
+        actions.append("clip_capture_queued")
 
     return {"accepted": True, "event_id": event_id, "actions": actions}
 

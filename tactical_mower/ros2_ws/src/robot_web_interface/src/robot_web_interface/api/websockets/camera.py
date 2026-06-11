@@ -222,19 +222,24 @@ async def websocket_camera_thermal2(websocket: WebSocket, ros_node: RobotNode):
     """Thermal camera 2 WebSocket stream - BINARY mode for lowest latency"""
     await websocket.accept()
     camera_type = 'thermal2'
+    # Quality: default LQ (CPU/bandwidth saver). Fullscreen UI may request ?quality=high.
+    _hq = websocket.query_params.get('quality') == 'high'
+    _max_w = WEB_STREAM_MAX_WIDTH if _hq else THERMAL_STREAM_MAX_WIDTH
+    _max_h = WEB_STREAM_MAX_HEIGHT if _hq else THERMAL_STREAM_MAX_HEIGHT
+    _jq = 70 if _hq else 35
     ros_node.connection_manager.register_camera_stream(camera_type)
     ros_node.connection_manager.add_camera_connection(camera_type, websocket)
-    
+
     last_sent_frame_timestamp = 0.0
-    
+
     try:
         while True:
             frame, frame_timestamp = ros_node.get_thermal2_frame()
-            
+
             if frame is not None and frame_timestamp > last_sent_frame_timestamp:
                 try:
                     jpeg_bytes = await _process_frame_to_bytes_async(
-                        frame, 'thermal2', THERMAL_STREAM_MAX_WIDTH, THERMAL_STREAM_MAX_HEIGHT, 35
+                        frame, 'thermal2', _max_w, _max_h, _jq
                     )
                     if jpeg_bytes:
                         await websocket.send_bytes(jpeg_bytes)
@@ -259,6 +264,11 @@ async def websocket_camera_rgb2(websocket: WebSocket, ros_node: RobotNode):
     """RGB2 camera WebSocket stream (Axis channel 1) - BINARY mode for lowest latency"""
     await websocket.accept()
     camera_type = 'rgb2'
+    # Quality: default LQ (CPU/bandwidth saver). Fullscreen UI may request ?quality=high.
+    _hq = websocket.query_params.get('quality') == 'high'
+    _max_w = WEB_STREAM_MAX_WIDTH if _hq else THERMAL_STREAM_MAX_WIDTH
+    _max_h = WEB_STREAM_MAX_HEIGHT if _hq else THERMAL_STREAM_MAX_HEIGHT
+    _jq = 70 if _hq else 35
     ros_node.connection_manager.register_camera_stream(camera_type)
     ros_node.connection_manager.add_camera_connection(camera_type, websocket)
 
@@ -271,7 +281,7 @@ async def websocket_camera_rgb2(websocket: WebSocket, ros_node: RobotNode):
             if frame is not None and frame_timestamp > last_sent_frame_timestamp:
                 try:
                     jpeg_bytes = await _process_frame_to_bytes_async(
-                        frame, 'rgb2', WEB_STREAM_MAX_WIDTH, WEB_STREAM_MAX_HEIGHT, 70
+                        frame, 'rgb2', _max_w, _max_h, _jq
                     )
                     if jpeg_bytes:
                         await websocket.send_bytes(jpeg_bytes)
@@ -441,16 +451,21 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
 
     import urllib.request
     import queue
+    import threading
 
     frame_queue = queue.Queue(maxsize=2)
     BOUNDARY = b'--frame'
     JPEG_START = b'\xff\xd8'
+    # MJPEG_LEAK_FIX_v1
+    stop_event = threading.Event()
+    stream_holder = {}  # mutable container so finally can close it
 
     def mjpeg_reader():
         try:
             stream = urllib.request.urlopen('http://192.168.10.169:8080/stream', timeout=10)
+            stream_holder['s'] = stream
             buf = b''
-            while True:
+            while not stop_event.is_set():
                 buf += stream.read(8192)
                 while True:
                     # Find two consecutive boundaries to extract one frame
@@ -480,6 +495,12 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
         except Exception as e:
             logger.error(f'MJPEG reader error: {e}')
         finally:
+            try:
+                s = stream_holder.get('s')
+                if s is not None:
+                    s.close()
+            except Exception:
+                pass
             frame_queue.put(None)
 
     import threading
@@ -497,6 +518,17 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
     except Exception as e:
         logger.error(f'Person detection error: {e}', exc_info=True)
     finally:
+        # MJPEG_LEAK_FIX_v1 signal mjpeg_reader thread to exit + close urllib stream
+        try:
+            stop_event.set()
+        except Exception:
+            pass
+        try:
+            s = stream_holder.get('s')
+            if s is not None:
+                s.close()
+        except Exception:
+            pass
         ros_node.connection_manager.remove_camera_connection(camera_type, websocket)
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)

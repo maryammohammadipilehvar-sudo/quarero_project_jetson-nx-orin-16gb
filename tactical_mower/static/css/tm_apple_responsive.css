@@ -432,3 +432,29 @@ body .navbar .navbar-right img {
         scroll-behavior: auto !important;
     }
 }
+
+/* ============================================================================
+ * MOBILE_NAVBAR_FIX_v1 â€” 2026-06-11
+ * Phone navbar: previously navbar was flex-wrap:nowrap with logo/status/estop
+ * being flex-shrink:0, so .nav-links shrunk to 0px on phones and the menu
+ * disappeared entirely. Force wrap and put nav-links on its own full-width
+ * second row.
+ * ========================================================================== */
+@media (max-width: 700px) {
+    body .navbar {
+        flex-wrap: wrap !important;
+        row-gap: 6px !important;
+    }
+    body .navbar .nav-links {
+        order: 200 !important;          /* last in flex order => wraps to row 2 */
+        flex-basis: 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        justify-content: flex-start !important;
+    }
+    body .navbar .nav-status-group {
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+    }
+}

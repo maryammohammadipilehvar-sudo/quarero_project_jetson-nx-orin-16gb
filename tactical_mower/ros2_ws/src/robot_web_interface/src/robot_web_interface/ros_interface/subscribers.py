@@ -95,6 +95,9 @@ class SubscriberCallbacks:
 
     def camera_callback(self, msg: Image) -> None:
         try:
+            # LAZY_CAM_PATCH_v1 lazy ingestion: skip if no WS client subscribed
+            if not self.connection_manager.is_camera_stream_active('main'):
+                return
             # Always process frames to ensure StatusManager always has the latest frame
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             
@@ -112,6 +115,9 @@ class SubscriberCallbacks:
 
     def thermal1_callback(self, msg: Image) -> None:
         try:
+            # LAZY_CAM_PATCH_v1 lazy ingestion: skip if no WS client subscribed
+            if not self.connection_manager.is_camera_stream_active('thermal1'):
+                return
             # Always process frames to ensure StatusManager always has the latest frame
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             
@@ -131,6 +137,9 @@ class SubscriberCallbacks:
 
     def thermal2_callback(self, msg: Image) -> None:
         try:
+            # LAZY_CAM_PATCH_v1 lazy ingestion: skip if no WS client subscribed
+            if not self.connection_manager.is_camera_stream_active('thermal2'):
+                return
             # Always process frames to ensure StatusManager always has the latest frame
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
@@ -148,6 +157,9 @@ class SubscriberCallbacks:
 
     def rgb2_callback(self, msg: Image) -> None:
         try:
+            # LAZY_CAM_PATCH_v1 lazy ingestion: skip if no WS client subscribed
+            if not self.connection_manager.is_camera_stream_active('rgb2'):
+                return
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
             msg_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9

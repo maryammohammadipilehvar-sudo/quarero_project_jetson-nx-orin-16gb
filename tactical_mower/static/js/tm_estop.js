@@ -41,7 +41,16 @@
             '<button class="estop-banner-close" type="button" aria-label="Schließen" title="Schließen">✕</button>';
         document.body.appendChild(banner);
 
-        btn.addEventListener('click', triggerEstop);
+        btn.addEventListener('click', toggleEstop); /* ESTOP_TOGGLE_PATCH_v1 */
+        function toggleEstop() {
+            // If already active, second click clears; otherwise triggers.
+            const b = document.getElementById('estop-btn');
+            if (b && b.classList.contains('is-active')) {
+                clearEstop();
+            } else {
+                triggerEstop();
+            }
+        }
         banner.querySelector('.estop-banner-close').addEventListener('click', hideBanner);
         banner.querySelector('.estop-banner-reset').addEventListener('click', clearEstop);
 
@@ -49,7 +58,8 @@
         document.addEventListener('keydown', function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === '.') {
                 e.preventDefault();
-                triggerEstop();
+                const b = document.getElementById('estop-btn');
+                if (b && b.classList.contains('is-active')) clearEstop(); else triggerEstop();
             }
         });
     }

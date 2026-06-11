@@ -171,6 +171,12 @@ async def websocket_camera_main(websocket: WebSocket, ros_node: RobotNode):
         # Only unregister if no clients are connected to this stream
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass
 
 
 async def websocket_camera_thermal1(websocket: WebSocket, ros_node: RobotNode):
@@ -216,6 +222,12 @@ async def websocket_camera_thermal1(websocket: WebSocket, ros_node: RobotNode):
         ros_node.connection_manager.remove_camera_connection(camera_type, websocket)
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass
 
 
 async def websocket_camera_thermal2(websocket: WebSocket, ros_node: RobotNode):
@@ -228,6 +240,8 @@ async def websocket_camera_thermal2(websocket: WebSocket, ros_node: RobotNode):
     _max_h = WEB_STREAM_MAX_HEIGHT if _hq else THERMAL_STREAM_MAX_HEIGHT
     _jq = 70 if _hq else 35
     ros_node.connection_manager.register_camera_stream(camera_type)
+    # Lazy: ensure the ROS subscription is alive so the upstream publisher runs.
+    ros_node.ensure_camera_sub(camera_type)
     ros_node.connection_manager.add_camera_connection(camera_type, websocket)
 
     last_sent_frame_timestamp = 0.0
@@ -258,6 +272,12 @@ async def websocket_camera_thermal2(websocket: WebSocket, ros_node: RobotNode):
         ros_node.connection_manager.remove_camera_connection(camera_type, websocket)
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass
 
 
 async def websocket_camera_rgb2(websocket: WebSocket, ros_node: RobotNode):
@@ -270,6 +290,8 @@ async def websocket_camera_rgb2(websocket: WebSocket, ros_node: RobotNode):
     _max_h = WEB_STREAM_MAX_HEIGHT if _hq else THERMAL_STREAM_MAX_HEIGHT
     _jq = 70 if _hq else 35
     ros_node.connection_manager.register_camera_stream(camera_type)
+    # Lazy: ensure the ROS subscription is alive so the upstream publisher runs.
+    ros_node.ensure_camera_sub(camera_type)
     ros_node.connection_manager.add_camera_connection(camera_type, websocket)
 
     last_sent_frame_timestamp = 0.0
@@ -300,6 +322,12 @@ async def websocket_camera_rgb2(websocket: WebSocket, ros_node: RobotNode):
         ros_node.connection_manager.remove_camera_connection(camera_type, websocket)
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass
 
 
 async def websocket_camera_lidar_debug(websocket: WebSocket, ros_node: RobotNode):
@@ -368,6 +396,12 @@ async def websocket_camera_lidar_debug(websocket: WebSocket, ros_node: RobotNode
         # Only clear frame cache if no clients are connected to this stream
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass
             ros_node.status_manager.clear_frame("lidar_debug")
 
 
@@ -438,6 +472,12 @@ async def websocket_camera_depth_debug(websocket: WebSocket, ros_node: RobotNode
         # Only clear frame cache if no clients are connected to this stream
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass
             ros_node.status_manager.clear_frame("depth_debug")
 
 
@@ -561,3 +601,9 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
         ros_node.connection_manager.remove_camera_connection(camera_type, websocket)
         if not ros_node.connection_manager.has_camera_connections(camera_type):
             ros_node.connection_manager.unregister_camera_stream(camera_type)
+            # Lazy: tear down the ROS subscription so the upstream publisher can pause.
+            if camera_type in ('thermal2', 'rgb2'):
+                try:
+                    ros_node.release_camera_sub(camera_type)
+                except Exception:
+                    pass

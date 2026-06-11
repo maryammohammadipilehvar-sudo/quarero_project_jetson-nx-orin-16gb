@@ -37,7 +37,8 @@ class FrameEntry:
 DEFAULT_CAMERAS = [
     #CameraConfig(camera_id='main_color', topic='/camera/camera/color/image_raw', frame_rate=10.0),
     CameraConfig(camera_id='eneo_thermal', topic='/ip_camera/thermal_raw', frame_rate=10.0),
-    CameraConfig(camera_id='eneo_rgb', topic='/ip_camera/rgb_raw', frame_rate=10.0),
+    # LAZY: dropped to allow the upstream rtsp_image_publisher to pause when idle.
+    #CameraConfig(camera_id='eneo_rgb', topic='/ip_camera/rgb_raw', frame_rate=10.0),
 ]
 
 

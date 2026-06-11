@@ -130,19 +130,40 @@ class RobotNode(Node):
             camera_qos
         )
         
-        self.thermal2_sub = self.create_subscription(
-            Image,
-            '/ip_camera/rgb_raw',
-            self.subscribers.thermal2_callback,
-            camera_qos
-        )
+        # thermal2 / rgb2 — LAZY: created on first WS client, destroyed on last
+        # disconnect. The downstream rtsp_image_publisher in theramal_camera_jazzy
+        # checks get_subscription_count() and pauses H.264 decode while idle.
+        self._camera_qos = camera_qos
+        self._lazy_camera_subs = {}
+        self._lazy_camera_lock = threading.Lock()
+        self._lazy_camera_config = {
+            'thermal2': ('/ip_camera/rgb_raw',  self.subscribers.thermal2_callback),
+            'rgb2':     ('/ip_camera/rgb2_raw', self.subscribers.rgb2_callback),
+        }
 
-        self.rgb2_sub = self.create_subscription(
-            Image,
-            '/ip_camera/rgb2_raw',
-            self.subscribers.rgb2_callback,
-            camera_qos
-        )
+    def ensure_camera_sub(self, camera_type: str) -> None:
+        """Create the ROS Image subscription for camera_type if not already.
+        Triggered on first WS client connect."""
+        if camera_type not in self._lazy_camera_config:
+            return
+        with self._lazy_camera_lock:
+            if camera_type in self._lazy_camera_subs:
+                return
+            topic, cb = self._lazy_camera_config[camera_type]
+            sub = self.create_subscription(Image, topic, cb, self._camera_qos)
+            self._lazy_camera_subs[camera_type] = sub
+            self.get_logger().info(f"Lazy-subscribed to {topic} for '{camera_type}'")
+
+    def release_camera_sub(self, camera_type: str) -> None:
+        """Destroy the ROS Image subscription for camera_type.
+        Triggered on the last WS client disconnect."""
+        if camera_type not in self._lazy_camera_config:
+            return
+        with self._lazy_camera_lock:
+            sub = self._lazy_camera_subs.pop(camera_type, None)
+            if sub is not None:
+                self.destroy_subscription(sub)
+                self.get_logger().info(f"Lazy-unsubscribed from '{camera_type}'")
 
         self.lidar_debug_sub = self.create_subscription(
             Image,

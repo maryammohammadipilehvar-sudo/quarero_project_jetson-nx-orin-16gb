@@ -129,8 +129,8 @@ class RobotControllerNode(Node):
         self.create_subscription(Float32, '/drive/battery_percentage', self._battery_percentage_callback, 10)
         self.create_subscription(Float32, '/drive/runtime_estimate', self._runtime_estimate_callback, 10)
         self.create_subscription(GeoPath, '/geopath', self._geopath_callback, 10)
-        # Mirror actual light commands (web service OR wp_follower auto headlight) into
-        # light_state so /robot/state stays truthful no matter who toggled the light.
+        # Mirror actual light commands (from the web light service) into light_state
+        # so /robot/state stays truthful no matter who toggled the light.
         self.create_subscription(Bool, self.topic_light_control, self._light_state_sync_callback, 10)
         self.create_service(CommandControl, '/control/light', self._light_control_service)
         self.create_service(CommandControl, '/control/alarm', self._alarm_control_service)
@@ -271,7 +271,7 @@ class RobotControllerNode(Node):
             self._log_warning("⚠️ Die manuelle Steuerung ist während des Ladevorgangs deaktiviert.")
             return
         # Ignore manual input in tactical mode
-        elif self._tactical_mode_active:
+        elif self._autonomous_enabled:
             self.get_logger().debug("Tactical mode active, ignoring manual joystick input")
             return
         else:
@@ -559,7 +559,7 @@ class RobotControllerNode(Node):
         state_dict = {
             "battery_percentage": battery_percentage,
             "velocity": self._current_speed,
-            "autonomous_mode": self._tactical_mode_active,
+            "autonomous_mode": self._autonomous_enabled,
             "autonomous_enabled": self._autonomous_enabled,  # Autonomous operation state (can be toggled via web app)
             "error_status": "",
             # Button states (single source of truth)

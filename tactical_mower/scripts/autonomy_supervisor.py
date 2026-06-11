@@ -32,7 +32,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool
 from interfaces.srv import CommandControl
 
-NODE_PATTERNS = ["livox_obstacle_node", "simple_obstacle_detector", "livox_ros_driver2_node", "nav2_navigation_node"]
+NODE_PATTERNS = ["livox_obstacle_node", "simple_obstacle_detector", "nav2_navigation_node"]
 
 _SHELL_COMMS = {'bash', 'sh', 'dash', 'zsh'}
 

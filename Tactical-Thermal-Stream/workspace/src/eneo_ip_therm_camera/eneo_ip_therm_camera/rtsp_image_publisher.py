@@ -136,6 +136,26 @@ class RTSPImagePublisher(Node):
 
     def _reader_loop(self):
         while self.running and rclpy.ok():
+            # Lazy mode: pause the whole decode pipeline when no ROS subscriber
+            # is listening. Releases cv2.VideoCapture (stops H.264 decoding) and
+            # sleeps until a subscriber connects.
+            try:
+                sub_count = self.publisher_.get_subscription_count()
+            except Exception:
+                sub_count = 1  # fall back to always-on if API breaks
+            if sub_count == 0:
+                if self.cap is not None and self.cap.isOpened():
+                    self.get_logger().info(
+                        'No subscribers — releasing RTSP capture to save CPU'
+                    )
+                    try:
+                        self.cap.release()
+                    except Exception:
+                        pass
+                    self.cap = None
+                time.sleep(0.5)
+                continue
+
             if self.cap is None or not self.cap.isOpened():
                 self._connect_stream(blocking=False)
                 time.sleep(self.reconnect_delay_sec)

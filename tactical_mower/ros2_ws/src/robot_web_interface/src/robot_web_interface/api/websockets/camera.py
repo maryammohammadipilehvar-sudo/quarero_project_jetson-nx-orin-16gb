@@ -519,7 +519,29 @@ async def websocket_camera_person_detection(websocket: WebSocket, ros_node: Robo
             _pd_counter += 1
             if _frame_skip > 1 and (_pd_counter % _frame_skip) != 0:
                 continue
-            await websocket.send_bytes(jpeg_bytes)
+            if _hq:
+                # HQ: passthrough native MJPEG (full resolution, full quality)
+                await websocket.send_bytes(jpeg_bytes)
+            else:
+                # LQ: decode + downscale + re-encode at low quality for visible SD feel
+                try:
+                    import numpy as np
+                    arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+                    frame_dec = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if frame_dec is not None:
+                        # Force a real downscale — source from jetson-ai is 640x360,
+                        # so the THERMAL_STREAM_MAX (640x480) cap was a no-op. Use 320 wide
+                        # + q=25 to make LQ visibly soft vs HQ passthrough.
+                        re_jpeg = await _process_frame_to_bytes_async(
+                            frame_dec, "person_detection",
+                            320, 240, 25
+                        )
+                        if re_jpeg:
+                            await websocket.send_bytes(re_jpeg)
+                            continue
+                    await websocket.send_bytes(jpeg_bytes)
+                except Exception:
+                    await websocket.send_bytes(jpeg_bytes)
     except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
         logger.debug('Person detection WebSocket closed')
     except Exception as e:

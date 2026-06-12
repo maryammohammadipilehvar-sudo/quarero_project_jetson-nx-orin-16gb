@@ -141,30 +141,6 @@ class RobotNode(Node):
             'rgb2':     ('/ip_camera/rgb2_raw', self.subscribers.rgb2_callback),
         }
 
-    def ensure_camera_sub(self, camera_type: str) -> None:
-        """Create the ROS Image subscription for camera_type if not already.
-        Triggered on first WS client connect."""
-        if camera_type not in self._lazy_camera_config:
-            return
-        with self._lazy_camera_lock:
-            if camera_type in self._lazy_camera_subs:
-                return
-            topic, cb = self._lazy_camera_config[camera_type]
-            sub = self.create_subscription(Image, topic, cb, self._camera_qos)
-            self._lazy_camera_subs[camera_type] = sub
-            self.get_logger().info(f"Lazy-subscribed to {topic} for '{camera_type}'")
-
-    def release_camera_sub(self, camera_type: str) -> None:
-        """Destroy the ROS Image subscription for camera_type.
-        Triggered on the last WS client disconnect."""
-        if camera_type not in self._lazy_camera_config:
-            return
-        with self._lazy_camera_lock:
-            sub = self._lazy_camera_subs.pop(camera_type, None)
-            if sub is not None:
-                self.destroy_subscription(sub)
-                self.get_logger().info(f"Lazy-unsubscribed from '{camera_type}'")
-
         self.lidar_debug_sub = self.create_subscription(
             Image,
             '/obstacles/image',
@@ -333,6 +309,30 @@ class RobotNode(Node):
         # We can't call the async service during __init__, but the robot defaults to False
 
         self.get_logger().info('Robot Node initialized')
+
+    def ensure_camera_sub(self, camera_type: str) -> None:
+        """Create the ROS Image subscription for camera_type if not already.
+        Triggered on first WS client connect."""
+        if camera_type not in self._lazy_camera_config:
+            return
+        with self._lazy_camera_lock:
+            if camera_type in self._lazy_camera_subs:
+                return
+            topic, cb = self._lazy_camera_config[camera_type]
+            sub = self.create_subscription(Image, topic, cb, self._camera_qos)
+            self._lazy_camera_subs[camera_type] = sub
+            self.get_logger().info(f"Lazy-subscribed to {topic} for '{camera_type}'")
+
+    def release_camera_sub(self, camera_type: str) -> None:
+        """Destroy the ROS Image subscription for camera_type.
+        Triggered on the last WS client disconnect."""
+        if camera_type not in self._lazy_camera_config:
+            return
+        with self._lazy_camera_lock:
+            sub = self._lazy_camera_subs.pop(camera_type, None)
+            if sub is not None:
+                self.destroy_subscription(sub)
+                self.get_logger().info(f"Lazy-unsubscribed from '{camera_type}'")
 
     def _joy_zero_timer_cb(self) -> None:
         if self.status_manager.emergency_active:

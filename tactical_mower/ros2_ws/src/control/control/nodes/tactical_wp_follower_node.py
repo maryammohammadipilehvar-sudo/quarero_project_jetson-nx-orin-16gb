@@ -1218,10 +1218,34 @@ class TacticalWpFollowerNode(Node):
     
     def _trigger_undocking_for_schedule(self, response):
         """Trigger undocking before starting a scheduled route.
-        
+
         Args:
             response: GetScheduleAction.Response (may contain route to start after undock)
         """
+        # User intent override: an explicit route start means the user wants
+        # the robot off the dock. The sticky self._charging_requested flag
+        # (which maps to need_charge=True in the state context and blocks
+        # CHARGING -> UNDOCKING) is cleared here so the transition is allowed.
+        # The battery cutoff is enforced upstream by the scheduler, so a route
+        # actually arriving here implies the battery is sufficient.
+        if self._charging_requested:
+            self._charging_requested = False
+            try:
+                clear_msg = Bool()
+                clear_msg.data = False
+                self._charging_requested_pub.publish(clear_msg)
+            except Exception:
+                pass
+            self.get_logger().info(
+                "Cleared charging request (need_charge) on explicit route start"
+            )
+            try:
+                m = String()
+                m.data = "\u23ed\ufe0f Lade-Anforderung gel\u00f6scht. Roboter darf abdocken."
+                self._log_info_pub.publish(m)
+            except Exception:
+                pass
+
         # Store the route to start after undocking if provided
         if response.waypoints and len(response.waypoints) > 0:
             geopath = GeoPath()

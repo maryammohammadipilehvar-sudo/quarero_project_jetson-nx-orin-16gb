@@ -1241,7 +1241,7 @@ class TacticalWpFollowerNode(Node):
             )
             try:
                 m = String()
-                m.data = "\u23ed\ufe0f Lade-Anforderung gel\u00f6scht. Roboter darf abdocken."
+                m.data = "\u23ed\ufe0f Lade-Anforderung gel\u00f6scht. Ich darf jetzt abdocken."
                 self._log_info_pub.publish(m)
             except Exception:
                 pass
@@ -3033,6 +3033,7 @@ class TacticalWpFollowerNode(Node):
                             self._current_state_name, avoid_state,
                             self._obstacle_mode, n_stop, n_slow, moving,
                             self._gps_jump_detected,
+                            g1=g1, g2=g2, fus=fus, rtk_age=rtk_age,
                         )
                         if ue and ue != self._last_user_event_msg:
                             self._last_user_event_msg = ue
@@ -3045,39 +3046,62 @@ class TacticalWpFollowerNode(Node):
             self.get_logger().debug(f"[NAVTEL] emit skipped: {e}")
 
     def _build_user_event_msg(self, state_name, avoid_state, obstacle_mode,
-                              n_stop, n_slow, moving, gps_jump):
+                              n_stop, n_slow, moving, gps_jump,
+                              g1=None, g2=None, fus=None, rtk_age=None):
         """Map the current control snapshot to a short end-user event sentence.
 
-        Returned string is meant for the dashboard 'Ereignisse' ticker. Keep it
-        in German, present-tense, and prefix with an emoji so it parses at a
-        glance. Order matters: more critical conditions win over less critical.
+        Returned string is meant for the dashboard 'Ereignisse' ticker. German,
+        present-tense, emoji prefix, and phrased in first-person from the robot's
+        point of view ("ich ..."). Order matters: safety overrides first, then
+        GPS-quality issues, then the state-machine.
         """
-        # Sicherheits-Overrides zuerst
+        # 1. Safety overrides
         if gps_jump:
-            return "📡 GPS-Sprung erkannt. Stabilisiere Position."
+            return "📡 Ich habe einen GPS-Sprung erkannt und stabilisiere meine Position."
         if (avoid_state or '').upper() == 'EMERGENCY_STOP' or n_stop > 0:
-            return "🛑 Hindernis erkannt. Warte bis frei."
+            return "🛑 Ich habe ein Hindernis erkannt und warte, bis es frei ist."
 
+        # 2. GPS / RTK quality (warn even outside NAVIGATING so the operator sees it)
+        g1s = (str(g1) if g1 is not None else '').strip()
+        g2s = (str(g2) if g2 is not None else '').strip()
+        fus_s = (str(fus) if fus is not None else '').strip()
+        no_fix_set = {'', '?', '0', 'No Fix', 'None', 'NO_FIX'}
+        if g1s in no_fix_set and g2s in no_fix_set:
+            return "🛰️ Ich habe gerade kein GPS-Signal und warte auf Empfang."
+        try:
+            rtk_age_f = float(rtk_age) if rtk_age is not None else None
+        except Exception:
+            rtk_age_f = None
+        if rtk_age_f is not None and rtk_age_f > 2.0:
+            return f"📡 Mein RTK-Signal ist verzögert ({rtk_age_f:.1f}s). Ich prüfe die Lage."
+        if fus_s in no_fix_set:
+            return "📡 Ich habe schlechtes RTK-Signal. Meine Position ist ungenauer."
+
+        # 3. State-machine in first person
         state = (state_name or '').upper()
         if state == 'MANUAL':
-            return "🎮 Manuelle Steuerung aktiv."
+            return "🎮 Du steuerst mich gerade manuell."
         if state == 'IDLE':
-            return "💤 Bereit. Warte auf Auftrag."
+            return "💤 Ich bin bereit und warte auf einen Auftrag."
         if state == 'NAVIGATING':
             if (avoid_state or '').upper() == 'SLOW_APPROACH' or n_slow > 0:
-                return "🐢 Hindernis in der Nähe. Reduziere Geschwindigkeit."
+                return "🐢 Hindernis in der Nähe. Ich fahre langsamer."
             if not moving:
-                return "🔍 Analysiere Umgebung."
-            return "🤖 Fahrt aktiv. Strecke frei."
+                return "🔍 Ich analysiere die Umgebung."
+            return "🤖 Ich fahre. Strecke ist frei."
+        if state == 'UNDOCKING':
+            return "🔌 Ich docke gerade von der Ladestation ab."
         if state == 'DOCKING':
             if n_stop > 0 or n_slow > 0:
-                return "🔌 Andocken pausiert. Hindernis vor Ladestation."
-            return "🔌 Andocke an Ladestation."
+                return "🔌 Ich pausiere das Andocken. Hindernis vor der Ladestation."
+            return "🔌 Ich docke gerade an die Ladestation an."
         if state == 'RETURNING_TO_HOME':
-            return "🏠 Kehre zur Ladestation zurück."
+            return "🏠 Ich kehre zur Ladestation zurück."
         if state == 'CHARGING':
-            return "⚡ Lade. Bereit nach voller Ladung."
-        return f"ℹ️ Status: {state_name}"
+            return "⚡ Ich lade. Bin bereit, sobald ich voll bin."
+        if state == 'DOCKED':
+            return "🔌 Ich bin angedockt."
+        return f"ℹ️ Ich bin im Zustand: {state_name}"
 
     def _publish_user_event_tick(self):
         """Periodic narrator: emit the current friendly event sentence on change.
@@ -3103,10 +3127,19 @@ class TacticalWpFollowerNode(Node):
             except Exception:
                 speed_kmh = 0.0
             moving = speed_kmh > 0.3
+            try:
+                rtk = self._rtk_monitor.get_current_status()
+                g1 = rtk.get('gnss1_status')
+                g2 = rtk.get('gnss2_status')
+                fus = rtk.get('fusion_status')
+                rtk_age = rtk.get('data_age_seconds')
+            except Exception:
+                g1 = g2 = fus = rtk_age = None
             ue = self._build_user_event_msg(
                 self._current_state_name, avoid_state,
                 self._obstacle_mode, n_stop, n_slow, moving,
                 self._gps_jump_detected,
+                g1=g1, g2=g2, fus=fus, rtk_age=rtk_age,
             )
             if ue and ue != self._last_user_event_msg:
                 self._last_user_event_msg = ue

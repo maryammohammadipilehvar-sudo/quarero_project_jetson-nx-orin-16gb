@@ -366,7 +366,7 @@ class RobotControllerNode(Node):
             self.get_logger().warn("EMERGENCY STOP ACTIVATED - Motors forced to 0")
             try:
                 m = String()
-                m.data = "\U0001F6A8 NOTSTOP aktiviert. Roboter angehalten."
+                m.data = "\U0001F6A8 NOTSTOP aktiviert. Ich bin angehalten."
                 self._log_info_pub.publish(m)
             except Exception:
                 pass
@@ -376,7 +376,7 @@ class RobotControllerNode(Node):
             self.get_logger().info("Emergency stop released")
             try:
                 m = String()
-                m.data = "\u2705 NOTSTOP gel\u00f6st. Roboter bereit."
+                m.data = "\u2705 NOTSTOP gelöst. Ich bin wieder bereit."
                 self._log_info_pub.publish(m)
             except Exception:
                 pass

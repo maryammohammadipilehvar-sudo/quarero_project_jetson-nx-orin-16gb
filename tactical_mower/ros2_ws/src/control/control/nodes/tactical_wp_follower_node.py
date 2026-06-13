@@ -1228,7 +1228,7 @@ class TacticalWpFollowerNode(Node):
         # CHARGING -> UNDOCKING) is cleared here so the transition is allowed.
         # The battery cutoff is enforced upstream by the scheduler, so a route
         # actually arriving here implies the battery is sufficient.
-        if self._charging_requested:
+        if explicit_user_request and self._charging_requested:
             self._charging_requested = False
             try:
                 clear_msg = Bool()

@@ -1216,7 +1216,7 @@ class TacticalWpFollowerNode(Node):
         
         self._robot_state_machine.transition_to(RobotState.NAVIGATING, context)
     
-    def _trigger_undocking_for_schedule(self, response):
+    def _trigger_undocking_for_schedule(self, response, explicit_user_request=False):
         """Trigger undocking before starting a scheduled route.
 
         Args:
@@ -1999,7 +1999,7 @@ class TacticalWpFollowerNode(Node):
                     self.get_logger().info(
                         f"Waypoint service: state={current_state.name}, triggering undocking before route '{route_name}'"
                     )
-                    self._trigger_undocking_for_schedule(synth)
+                    self._trigger_undocking_for_schedule(synth, explicit_user_request=True)
                     response.message = f"Undocking; route '{route_name}' queued ({len(waypoints)} wp)"
                 else:
                     self._start_navigation_directly(geopath, route_name)

@@ -594,9 +594,13 @@
                 batteryCard.style.borderLeftColor = '#4CAF50';
             }
             
-            // NEU: Geschwindigkeit in km/h anzeigen
+            // Geschwindigkeit: hidden status-card weiter in km/h, sichtbares hero-display in m/s.
         const velocity_kmh = state.velocity_kmh || 0;
-        document.getElementById('velocity-value').textContent = `${velocity_kmh.toFixed(1)} km/h`;
+        const velocity_ms = velocity_kmh / 3.6;
+        const velLegacy = document.getElementById('velocity-value');
+        if (velLegacy) velLegacy.textContent = `${velocity_kmh.toFixed(1)} km/h`;
+        const velHero = document.getElementById('velocity-value-display');
+        if (velHero) velHero.textContent = `${velocity_ms.toFixed(2)} m/s`;
             
             // Verbl. Einsatzzeit anzeigen (in Minuten, ohne Nachkommastellen)
             const runtimeEl = document.getElementById('runtime-value');

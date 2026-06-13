@@ -364,10 +364,22 @@ class RobotControllerNode(Node):
             cmd.right_vel = 0.0
             self._cmd_pub.publish(cmd)
             self.get_logger().warn("EMERGENCY STOP ACTIVATED - Motors forced to 0")
+            try:
+                m = String()
+                m.data = "\U0001F6A8 NOTSTOP aktiviert. Roboter angehalten."
+                self._log_info_pub.publish(m)
+            except Exception:
+                pass
             response.message = "Emergency stop activated"
         else:
             self._emergency_stop.deactivate()
             self.get_logger().info("Emergency stop released")
+            try:
+                m = String()
+                m.data = "\u2705 NOTSTOP gel\u00f6st. Roboter bereit."
+                self._log_info_pub.publish(m)
+            except Exception:
+                pass
             response.message = "Emergency stop deactivated"
         
         response.success = True

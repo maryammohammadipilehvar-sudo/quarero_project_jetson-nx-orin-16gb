@@ -1263,32 +1263,110 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
     }
+        // Apple-style toast — non-blocking notifications for route/charge actions.
+        function showToast(msg, kind) {
+            const stack = document.getElementById('tm-toast-stack');
+            if (!stack) return;
+            const el = document.createElement('div');
+            el.className = 'tm-toast' + (kind ? (' tm-toast-' + kind) : '');
+            el.textContent = msg;
+            stack.appendChild(el);
+            requestAnimationFrame(() => el.classList.add('show'));
+            setTimeout(() => {
+                el.classList.remove('show');
+                setTimeout(() => el.remove(), 240);
+            }, 3200);
+        }
+
+        // Generic styled confirm modal (reuses #confirm-modal). Returns a Promise<boolean>.
+        // Replaces the inline onclick handlers on the existing buttons for the duration
+        // of this prompt by cloning them; restores the original onclick afterwards so
+        // confirmGoToCharge() / closeConfirmModal() keep working for the legacy flow.
+        function showConfirmModal(title, message, opts) {
+            opts = opts || {};
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirm-modal');
+                if (!modal) { resolve(false); return; }
+                const titleEl = modal.querySelector('.modal-title');
+                const msgEl = modal.querySelector('#confirm-message');
+                const cancelBtn = modal.querySelector('.modal-btn-secondary');
+                const confirmBtn = modal.querySelector('.modal-btn-primary');
+                if (titleEl) titleEl.textContent = title || 'Bestätigung';
+                if (msgEl) msgEl.textContent = message || '';
+                if (cancelBtn) cancelBtn.textContent = opts.cancelLabel || 'Abbrechen';
+                if (confirmBtn) confirmBtn.textContent = opts.confirmLabel || 'Fortfahren';
+
+                const origCancelOnclick = cancelBtn ? cancelBtn.getAttribute('onclick') : null;
+                const origConfirmOnclick = confirmBtn ? confirmBtn.getAttribute('onclick') : null;
+                if (cancelBtn) cancelBtn.removeAttribute('onclick');
+                if (confirmBtn) confirmBtn.removeAttribute('onclick');
+
+                const close = (result) => {
+                    modal.classList.remove('show');
+                    if (cancelBtn) {
+                        cancelBtn.removeEventListener('click', onCancel);
+                        if (origCancelOnclick) cancelBtn.setAttribute('onclick', origCancelOnclick);
+                    }
+                    if (confirmBtn) {
+                        confirmBtn.removeEventListener('click', onConfirm);
+                        if (origConfirmOnclick) confirmBtn.setAttribute('onclick', origConfirmOnclick);
+                    }
+                    resolve(result);
+                };
+                const onCancel = () => close(false);
+                const onConfirm = () => close(true);
+                if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+                if (confirmBtn) confirmBtn.addEventListener('click', onConfirm);
+                modal.classList.add('show');
+            });
+        }
+
         async function startSelectedRouteNow() {
             const sel = document.getElementById('route-select');
             let routeName = sel.value;
             if (!routeName) {
                 const opts = Array.from(sel.options).filter(o => o.value);
                 if (opts.length === 0) {
-                    alert('Keine Route vorhanden. Bitte zuerst eine Route erstellen.');
+                    showToast('Keine Route vorhanden. Bitte zuerst eine Route erstellen.', 'error');
                     return;
                 }
                 routeName = opts[0].value;
                 sel.value = routeName;
                 loadSelectedRoute();
             }
-            if (!confirm(`Route "${routeName}" jetzt starten?`)) {
-                return;
-            }
+
+            const isCharging = !!(typeof chargingStatus !== 'undefined' && chargingStatus);
+            const title = 'Route starten';
+            const message = isCharging
+                ? `Laden wird deaktiviert. Route „${routeName}" wird gestartet.`
+                : `Route „${routeName}" jetzt starten?`;
+            const ok = await showConfirmModal(title, message);
+            if (!ok) return;
+
             try {
+                if (isCharging) {
+                    const chargeResp = await fetch('/api/control/charge/manual', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ state: false })
+                    });
+                    if (!chargeResp.ok) {
+                        throw new Error('Laden konnte nicht deaktiviert werden (HTTP ' + chargeResp.status + ').');
+                    }
+                    const chargeData = await chargeResp.json();
+                    if (chargeData && typeof chargeData.charging_enabled !== 'undefined') {
+                        updateChargingButton(chargeData.charging_enabled);
+                    }
+                }
                 const response = await fetch(`/api/routes/start_now/${encodeURIComponent(routeName)}`, { method: 'POST' });
                 const data = await response.json();
                 if (data.status === 'success') {
-                    alert(`✅ Route "${data.route}" gestartet.`);
+                    showToast(`✅ Route „${data.route}" gestartet.`, 'success');
                 } else {
-                    alert('❌ ' + (data.message || 'Unbekannter Fehler'));
+                    showToast('❌ ' + (data.message || 'Unbekannter Fehler'), 'error');
                 }
             } catch (e) {
-                alert('❌ Verbindungsfehler: ' + e.message);
+                showToast('❌ ' + e.message, 'error');
             }
         }
 

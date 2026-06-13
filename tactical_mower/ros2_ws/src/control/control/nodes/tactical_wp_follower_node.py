@@ -54,8 +54,14 @@ class TacticalWpFollowerNode(Node):
         # Obstacle avoidance parameters
         self.declare_parameter('obstacle_avoidance.speed_reduction_slow', 0.6)
         self.declare_parameter('obstacle_avoidance.initial_stop_duration', 3.0)
+        self.declare_parameter('obstacle_avoidance.resume_clear_duration', 3.0)
         self.declare_parameter('obstacle_avoidance.deadlock_timeout', 30.0)
         self.declare_parameter('obstacle_avoidance.lidar_timeout', 2.0)
+
+        # Structured navigation telemetry ([NAVTEL]) for evidence-based troubleshooting.
+        # Always-on, additive, fail-soft — does NOT influence any motion decision.
+        self.declare_parameter('telemetry.enabled', True)
+        self.declare_parameter('telemetry.heartbeat_period', 2.0)  # seconds between heartbeat lines when nothing changes
 
         # Load parameters
         self._settings_file = Path(self.get_parameter('settings_file').value).expanduser()
@@ -76,13 +82,6 @@ class TacticalWpFollowerNode(Node):
         # Initialize settings-related attributes before loading
         self.max_speed = 1.0
         self._settings_cache = {}
-        # ArUco precision-docking config lives in its own file (separate from
-        # settings.yaml so the web/scheduler writers never touch it). Defaults
-        # keep ArUco docking OFF until an operator enables it + teaches a setpoint.
-        self._aruco_config_file = self._settings_file.parent / 'aruco_dock.yaml'
-        self._aruco_config = {}
-        self._aruco_pose_msg: Optional[PoseStamped] = None
-        self._aruco_pose_rx_time: float = 0.0
         self._home_position: Optional[Tuple[float, float, float]] = None
         self._charge_position: Optional[Tuple[float, float, float]] = None
         self._dock_home_radius = 2.0  # meters
@@ -103,9 +102,19 @@ class TacticalWpFollowerNode(Node):
         # Get waypoint tolerance from settings (default 0.5m if not set)
         wp_tolerance = self._settings_cache.get('waypoint_tolerance', 0.5)
         
-        # Obstacle avoidance enabled state (controlled via topic, initialized from settings)
-        self._enable_obstacle_avoidance = self._settings_cache.get('enable_obstacle_avoidance', True)
-        self.get_logger().info(f"Obstacle avoidance initialized from settings: {self._enable_obstacle_avoidance}")
+        # Obstacle handling mode: 'off' | 'stop' | 'avoid' (live-controlled via /control/obstacle_mode).
+        #   off   -> linear follower, no obstacle reaction (the LiDAR/sensor-loss watchdog still halts)
+        #   stop  -> linear follower + protective stop: hold still until the obstacle is removed (never route around)
+        #   avoid -> Nav2 follower: path-plan around obstacles
+        self._obstacle_mode = self._resolve_obstacle_mode(self._settings_cache)
+        # Derived flag: True whenever obstacle handling is active at all (stop OR avoid).
+        # It arms the LiDAR-loss safety halt during navigation and informs follower
+        # selection — it does NOT decide whether the protective-stop reflex runs. That
+        # reflex is 'stop'-only (see _build_navigation_kwargs): in 'avoid' Nav2 owns
+        # collision handling via its costmap, so layering the reflex on top would clamp
+        # Nav2's output to zero and defeat path-planning.
+        self._enable_obstacle_avoidance = (self._obstacle_mode != 'off')
+        self.get_logger().info(f"Obstacle mode initialized from settings: {self._obstacle_mode}")
 
         # State persistence removed - state machine handles all state management
         
@@ -158,7 +167,7 @@ class TacticalWpFollowerNode(Node):
         # _max_route_distance is already loaded from settings in line 111
         
         # Charge position tolerances
-        self._charge_position_tolerance_charging = 0.18  # 18cm: matches docking charge_position_tolerance (measured rest residual)
+        self._charge_position_tolerance_charging = 0.18  # 18cm "am I present at charge" detection — deliberately looser than the 5cm docking STOP (docking_state charge_position_tolerance) to give RTK-noise hysteresis so the robot can't bounce out of DOCKED. NOT the stop precision.
         self._charge_position_tolerance_undocking = 0.4  # 40cm for sending undock command
         
         # Initialize robot state machine with ROS node reference
@@ -203,15 +212,16 @@ class TacticalWpFollowerNode(Node):
         )
         self.get_logger().info("Linear waypoint follower initialized")
         
-        # Select active follower based on obstacle avoidance setting
-        # Obstacle avoidance enabled -> Nav2 follower (path planning around obstacles)
-        # Obstacle avoidance disabled -> Linear follower (direct waypoint-to-waypoint)
-        if self._enable_obstacle_avoidance:
+        # Select active follower based on obstacle mode.
+        # Only 'avoid' uses Nav2 (path planning around obstacles); 'stop' and 'off'
+        # use the linear follower so the robot drives straight and the protective-stop
+        # controller (for 'stop') halts it rather than routing around.
+        if self._obstacle_mode == 'avoid':
             self._waypoint_follower = self._waypoint_follower_nav2
-            self.get_logger().info("Active follower: Nav2 (obstacle avoidance enabled)")
+            self.get_logger().info("Active follower: Nav2 (obstacle mode: avoid)")
         else:
             self._waypoint_follower = self._waypoint_follower_linear
-            self.get_logger().info("Active follower: Linear (obstacle avoidance disabled)")
+            self.get_logger().info(f"Active follower: Linear (obstacle mode: {self._obstacle_mode})")
         # Initialize state machine-based obstacle avoidance controller
         # This will be used when OccupancyGrid data is available via navigation_helper
         
@@ -226,8 +236,17 @@ class TacticalWpFollowerNode(Node):
         # Load obstacle avoidance parameters
         speed_reduction_slow = float(self.get_parameter('obstacle_avoidance.speed_reduction_slow').value)
         initial_stop_duration = float(self.get_parameter('obstacle_avoidance.initial_stop_duration').value)
+        resume_clear_duration = float(self.get_parameter('obstacle_avoidance.resume_clear_duration').value)
         deadlock_timeout = float(self.get_parameter('obstacle_avoidance.deadlock_timeout').value)
         self._lidar_timeout = float(self.get_parameter('obstacle_avoidance.lidar_timeout').value)
+
+        # Navigation telemetry ([NAVTEL]) state
+        self._telemetry_enabled = bool(self.get_parameter('telemetry.enabled').value)
+        self._telemetry_heartbeat = float(self.get_parameter('telemetry.heartbeat_period').value)
+        self._navtel_last_sig = None       # last emitted change-signature
+        self._navtel_last_emit = 0.0       # wall-clock of last emitted line
+        self._last_user_event_msg = None   # last user-facing event sent to /tactical/logging/info
+        self._current_state_name = 'UNINITIALIZED'  # cached each loop for the telemetry chokepoint
         
         # Initialize controller with deadlock callback and parameters
         # This controller will be used by navigation_helper when OccupancyGrid is available
@@ -235,6 +254,7 @@ class TacticalWpFollowerNode(Node):
             logger=self.get_logger(),
             speed_reduction_slow=speed_reduction_slow,
             initial_stop_duration=initial_stop_duration,
+            resume_clear_duration=resume_clear_duration,
             deadlock_timeout=deadlock_timeout,
             deadlock_callback=deadlock_warning_callback
         )
@@ -296,13 +316,6 @@ class TacticalWpFollowerNode(Node):
         # Publisher for clearing charging request when entering manual mode
         self._charging_requested_pub = self.create_publisher(Bool, '/tactical/control/charging/requested', 10)
 
-        # Auto headlight: ON while heading to / docking at the charge point (so the
-        # ArUco marker is visible at night), OFF once docked (operator request
-        # 2026-06-05). joy_controller forwards /control/light to the ESP relay;
-        # robot_controller mirrors it into /robot/state for the UI.
-        self._light_pub = self.create_publisher(Bool, '/control/light', 10)
-        self._auto_light_on = False  # True only while WE are driving the headlight
-
         # Services
         self.create_service(CommandControl, '/control/autonomous_operation', self._autonomous_operation_service)
         self.create_service(WaypointService, '/control/waypoints', self._waypoint_service)
@@ -339,16 +352,13 @@ class TacticalWpFollowerNode(Node):
         self.create_subscription(Bool, '/tactical/control/charging/requested', self._charging_requested_callback, 10)
         self.create_subscription(Float32, '/control/set_speed', self._set_speed_callback, 10)
         self.create_subscription(Bool, '/control/obstacle_avoidance_enabled', self._obstacle_avoidance_enabled_callback, 10)
+        self.create_subscription(String, '/control/obstacle_mode', self._obstacle_mode_callback, 10)
         self.create_subscription(Bool, '/control/enable_charging', self._charging_relay_callback, 10)
         
         # Always subscribe to obstacle topics (controller is always initialized)
         self.create_subscription(Bool, '/obstacle_detected', self._obstacle_callback, 10)
         self.create_subscription(OccupancyGrid, '/obstacles/lidar', self._occupancy_grid_callback, 10)
         self.create_subscription(ObstacleSectors, '/obstacles/sectors', self._obstacle_sectors_callback, 10)
-
-        # ArUco dock-marker pose (from aruco_dock_detector in the camera container).
-        # Consumed by DOCKING only when ArUco docking is enabled; harmless otherwise.
-        self.create_subscription(PoseStamped, '/docking/aruco_pose', self._aruco_pose_callback, 10)
 
         # Control timer
         self._control_timer = None
@@ -357,6 +367,10 @@ class TacticalWpFollowerNode(Node):
 
         # Settings reload timer - check for settings changes every 2 seconds
         self._settings_reload_timer = self.create_timer(2.0, self._load_settings)
+
+        # User-facing event narrator — 1 Hz so the dashboard ticker also gets
+        # status in MANUAL / IDLE where no drive commands flow.
+        self._user_event_timer = self.create_timer(1.0, self._publish_user_event_tick)
 
         self.get_logger().info("TacticalWpFollowerNode initialized")
         
@@ -413,84 +427,6 @@ class TacticalWpFollowerNode(Node):
         except Exception as e:
             self.get_logger().warn(f"Failed to parse robot state: {e}")
 
-    def _aruco_pose_callback(self, msg: PoseStamped):
-        """Cache the latest dock-marker pose + receipt time (camera optical frame)."""
-        self._aruco_pose_msg = msg
-        self._aruco_pose_rx_time = time()
-
-    def _load_aruco_config(self):
-        """Load ArUco precision-docking config from aruco_dock.yaml (if present).
-
-        Read-only here; the only writer is the teach tool. Absent/invalid file
-        leaves _aruco_config empty → docking stays on the GPS line-follow.
-        """
-        cfg = {}
-        try:
-            if self._aruco_config_file.exists():
-                with open(self._aruco_config_file, 'r') as f:
-                    cfg = yaml.safe_load(f) or {}
-        except Exception as e:
-            self.get_logger().warn(f"Failed to load aruco_dock config: {e}")
-            cfg = {}
-        self._aruco_config = cfg if isinstance(cfg, dict) else {}
-
-    @staticmethod
-    def _marker_bearing_from_quat(q) -> float:
-        """Yaw of the marker's surface normal in the camera XZ plane (rad).
-
-        The marker's +z axis is its outward normal; its direction in camera
-        coordinates is the third column of the rotation matrix. The horizontal
-        angle of that normal (atan2(normal_x, normal_z)) tells us how square-on
-        we are to the marker — 0 = head-on.
-        """
-        normal_x = 2.0 * (q.x * q.z + q.w * q.y)
-        normal_z = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
-        return math.atan2(normal_x, normal_z)
-
-    @staticmethod
-    def _marker_dock_errors(pose) -> Tuple[float, float, float]:
-        """Robot pose in the DOCK frame, from the marker pose (camera optical frame).
-
-        This is what makes the dock 'normal-aligned' instead of just 'pointing at the
-        marker': we invert the marker pose to get the camera's pose relative to the
-        marker plane, giving the three errors a unicycle docking controller needs:
-          - cross_track: how far the robot is to the side of the dock centre-line (m),
-                         (+) = robot is to one side; sign verified on the bench.
-          - range_perp:  perpendicular distance from the robot to the marker plane (m).
-          - heading_err: robot heading vs the dock normal (rad); 0 = approaching head-on.
-        Camera-in-marker = -R^T · p; heading from the camera +z axis expressed in the
-        marker frame. Works for one marker (its own normal) or, later, a fused two-marker
-        pose (a far more accurate normal) with no controller change.
-        """
-        q = pose.orientation
-        p = pose.position
-        x, y, z, w = q.x, q.y, q.z, q.w
-        # Rotation matrix (marker -> camera).
-        r00 = 1.0 - 2.0 * (y * y + z * z)
-        r01 = 2.0 * (x * y - z * w)
-        r02 = 2.0 * (x * z + y * w)
-        r10 = 2.0 * (x * y + z * w)
-        r11 = 1.0 - 2.0 * (x * x + z * z)
-        r12 = 2.0 * (y * z - x * w)
-        r20 = 2.0 * (x * z - y * w)
-        r21 = 2.0 * (y * z + x * w)
-        r22 = 1.0 - 2.0 * (x * x + y * y)
-        px, py, pz = p.x, p.y, p.z
-        # Camera position in marker frame = -R^T · p.
-        cam_x = -(r00 * px + r10 * py + r20 * pz)
-        cam_z = -(r02 * px + r12 * py + r22 * pz)
-        cross_track = cam_x
-        range_perp = abs(cam_z)
-        # Camera forward (0,0,1) expressed in marker frame = (r20, r21, r22). Head-on the
-        # camera looks anti-parallel to the marker +z, so the raw angle is ~pi; subtract
-        # it so heading_err is ~0 when square-on.
-        heading_err = math.atan2(r20, r22) - math.pi
-        while heading_err > math.pi:
-            heading_err -= 2.0 * math.pi
-        while heading_err < -math.pi:
-            heading_err += 2.0 * math.pi
-        return cross_track, range_perp, heading_err
-
     def _load_settings(self):
         """Load settings (home point, charge point, speed factor, waypoint tolerance)."""
         settings_file = self._settings_file
@@ -502,9 +438,6 @@ class TacticalWpFollowerNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Failed to load settings: {e}")
         self._settings_cache = settings
-
-        # Refresh ArUco docking config from its own file (off if absent/invalid).
-        self._load_aruco_config()
 
         new_speed = settings.get('speed_factor')
         if new_speed is not None and new_speed != self.max_speed:
@@ -1743,24 +1676,6 @@ class TacticalWpFollowerNode(Node):
             # Transition to IDLE on failure
             self._robot_state_machine.transition_to(RobotState.IDLE, context)
 
-    def _update_auto_headlight(self, current_state: RobotState):
-        """Turn the headlight ON while heading to / docking at the charge point, OFF
-        once that flow ends (docked, or aborted to ERROR/MANUAL).
-
-        Edge-triggered and self-scoped: we only ever turn the light OFF if WE turned
-        it ON, so manual light control in other states is never overridden.
-        """
-        going_to_charge = current_state in (
-            RobotState.RETURNING_TO_HOME, RobotState.DOCKING)
-        if going_to_charge and not self._auto_light_on:
-            self._light_pub.publish(Bool(data=True))
-            self._auto_light_on = True
-            self.get_logger().info("Auto headlight ON (heading to charge / docking)")
-        elif not going_to_charge and self._auto_light_on:
-            self._light_pub.publish(Bool(data=False))
-            self._auto_light_on = False
-            self.get_logger().info("Auto headlight OFF (docked / left charge approach)")
-
     def _publish_charging_status(self, state: str, message: str, debug_info: dict = None):
         """Publish charging status with optional debug information.
         
@@ -1886,53 +1801,81 @@ class TacticalWpFollowerNode(Node):
         self.max_speed = msg.data
         self.get_logger().info(f"Max speed updated to: {self.max_speed}")
 
-    def _obstacle_avoidance_enabled_callback(self, msg: Bool):
-        """Handle obstacle avoidance enable/disable update and switch waypoint follower.
-        
-        When obstacle avoidance is enabled: Use Nav2 waypoint follower (path planning)
-        When obstacle avoidance is disabled: Use linear waypoint follower (direct navigation)
+    @staticmethod
+    def _resolve_obstacle_mode(settings) -> str:
+        """Resolve obstacle handling mode from settings.
+
+        Authoritative key is 'obstacle_mode' (off|stop|avoid). For backward
+        compatibility an explicit legacy 'enable_obstacle_avoidance: false' maps to
+        'off'. Everything else (including legacy true / unset) defaults to 'stop' —
+        the protective stop, which is the safe default for a security robot.
         """
-        previous_state = self._enable_obstacle_avoidance
-        self._enable_obstacle_avoidance = msg.data
-        
-        # Only switch follower if the state actually changed
-        if previous_state == msg.data:
+        mode = settings.get('obstacle_mode')
+        if isinstance(mode, str) and mode.lower() in ('off', 'stop', 'avoid'):
+            return mode.lower()
+        if settings.get('enable_obstacle_avoidance') is False:
+            return 'off'
+        return 'stop'
+
+    def _obstacle_mode_callback(self, msg: String):
+        """Set obstacle handling mode at runtime: 'off' | 'stop' | 'avoid'."""
+        mode = (msg.data or '').strip().lower()
+        if mode not in ('off', 'stop', 'avoid'):
+            self.get_logger().warn(f"Ignoring invalid obstacle_mode '{msg.data}' (expected off|stop|avoid)")
             return
-        
-        self.get_logger().info(f"Obstacle avoidance {'enabled' if msg.data else 'disabled'}")
-        
-        # Determine the current and new waypoint followers
+        self._apply_obstacle_mode(mode)
+
+    def _obstacle_avoidance_enabled_callback(self, msg: Bool):
+        """Legacy boolean control: True -> 'avoid', False -> 'off'.
+
+        Retained for backward compatibility. The precise three-way control is
+        /control/obstacle_mode (String); prefer that.
+        """
+        self._apply_obstacle_mode('avoid' if msg.data else 'off')
+
+    def _apply_obstacle_mode(self, new_mode: str):
+        """Apply an obstacle handling mode, swapping the active waypoint follower as needed.
+
+        'avoid' uses the Nav2 follower (routes around obstacles); 'stop' and 'off'
+        use the linear follower (for 'stop', the protective-stop controller halts the
+        robot). When the follower changes during active navigation, the current
+        waypoints/mode/index are transferred so the route resumes seamlessly.
+        """
+        new_mode = new_mode if new_mode in ('off', 'stop', 'avoid') else 'stop'
+        previous_mode = self._obstacle_mode
+        self._obstacle_mode = new_mode
+        self._enable_obstacle_avoidance = (new_mode != 'off')
+
+        if previous_mode == new_mode:
+            return
+
+        self.get_logger().info(f"Obstacle mode changed: {previous_mode} -> {new_mode}")
+
+        # Desired follower for the new mode
+        new_follower = self._waypoint_follower_nav2 if new_mode == 'avoid' else self._waypoint_follower_linear
+        follower_name = "Nav2" if new_mode == 'avoid' else "Linear"
+
         old_follower = self._waypoint_follower
-        if msg.data:
-            # Obstacle avoidance enabled -> switch to Nav2 follower
-            new_follower = self._waypoint_follower_nav2
-            follower_name = "Nav2"
-        else:
-            # Obstacle avoidance disabled -> switch to linear follower
-            new_follower = self._waypoint_follower_linear
-            follower_name = "Linear"
-        
-        # Check if the old follower was active and transfer state to new follower
+        if new_follower is old_follower:
+            # Mode changed but the follower is the same (e.g. stop <-> off) — nothing to swap.
+            return
+
+        old_follower_name = "Nav2" if old_follower is self._waypoint_follower_nav2 else "Linear"
         was_active = old_follower.is_active()
         current_waypoints = getattr(old_follower, '_waypoints', []) or getattr(old_follower, '_waypoints_map', [])
         current_mode = getattr(old_follower, 'mode', WaypointMode.ONCE)
         current_idx = getattr(old_follower, '_current_wp_idx', 0)
-        
-        # Stop the old follower
-        old_follower_name = "Linear" if msg.data else "Nav2"  # msg.data=True means we're switching FROM linear TO Nav2
+
         if was_active:
             old_follower.stop()
             self.get_logger().info(f"Stopped {old_follower_name} follower")
-        
-        # Switch to the new follower
+
         self._waypoint_follower = new_follower
         self.get_logger().info(f"Switched to {follower_name} waypoint follower")
-        
-        # If navigation was active, transfer waypoints and resume on new follower
+
         if was_active and current_waypoints:
             new_follower.set_mode(current_mode)
             new_follower.set_waypoints(current_waypoints)
-            # Resume from the same waypoint index if possible
             new_follower.start(start_index=current_idx)
             self.get_logger().info(
                 f"Resumed navigation on {follower_name} follower at waypoint {current_idx}/{len(current_waypoints)}"
@@ -2366,29 +2309,13 @@ class TacticalWpFollowerNode(Node):
         # Add waypoint follower for NAVIGATING and RETURNING_TO_HOME states
         kwargs['waypoint_follower'] = self._waypoint_follower
         
-        # Add obstacle avoidance controller and obstacle data
-        kwargs['obstacle_avoidance'] = self._obstacle_avoidance if self._enable_obstacle_avoidance else None
+        # Protective-stop reflex layer: ONLY in 'stop' mode. In 'avoid', Nav2 plans
+        # around obstacles using its costmap, so the reflex must not run here — it would
+        # override Nav2's commands with (0,0) and the robot could never execute the
+        # manoeuvre. In 'off' there is no reaction. (The LiDAR-loss safety halt below is
+        # gated separately on _enable_obstacle_avoidance and still arms for both modes.)
+        kwargs['obstacle_avoidance'] = self._obstacle_avoidance if self._obstacle_mode == 'stop' else None
         kwargs['obstacle_sectors'] = self._obstacle_sectors_msg  # Sector analysis from detection
-
-        # ArUco precision-docking: pass the config (off by default) + the latest
-        # marker pose reduced to (lateral, range, bearing, age). DockingState only
-        # acts on these when aruco_dock.yaml enables it and a setpoint is taught.
-        kwargs['aruco_config'] = self._aruco_config
-        aruco_marker = None
-        if self._aruco_pose_msg is not None:
-            age = time() - self._aruco_pose_rx_time
-            p = self._aruco_pose_msg.pose
-            cross, range_perp, heading_err = self._marker_dock_errors(p)
-            aruco_marker = (
-                p.position.x,                                   # lateral x in camera frame (m)
-                p.position.z,                                   # straight range in camera frame (m)
-                self._marker_bearing_from_quat(p.orientation),  # marker-normal bearing (rad)
-                age,                                            # seconds since received
-                cross,                                          # cross-track: robot offset from dock axis (m)
-                range_perp,                                     # perpendicular range to marker plane (m)
-                heading_err,                                    # robot heading vs dock normal (rad), 0 = head-on
-            )
-        kwargs['aruco_marker'] = aruco_marker
 
         # Callbacks will be added at call site as needed
 
@@ -2500,12 +2427,10 @@ class TacticalWpFollowerNode(Node):
                 self._robot_state_machine.transition_to(next_state, context)
         
         current_state = self._robot_state_machine.get_state()
+        self._current_state_name = current_state.name  # cached for [NAVTEL] telemetry chokepoint
 
         # Explicit transitions have been removed - state machine's determine_next_state()
         # handles all automatic transitions. State entry callbacks handle setup.
-
-        # Headlight for night docking: ON heading to/docking at charge, OFF when docked.
-        self._update_auto_headlight(current_state)
 
         # Publish current robot state
         self._publish_robot_state(current_state, context)
@@ -3006,8 +2931,166 @@ class TacticalWpFollowerNode(Node):
         cmd = CommandDrive()
         cmd.left_vel = left_rad_s
         cmd.right_vel = right_rad_s
-        
+
         self._cmd_pub.publish(cmd)
+
+        # Telemetry chokepoint: every motion command (drive AND watchdog halt) passes
+        # here. steer/speed are pre-kinematics follower units (±100). Fail-soft inside.
+        self._emit_navtel(steer, speed)
+
+    def _emit_navtel(self, steer: float, speed: float):
+        """Emit one structured [NAVTEL] telemetry line for evidence-based troubleshooting.
+
+        Single greppable line correlating, on one timeline: robot state, avoidance
+        reflex state, obstacle mode, the final drive command, blocked sectors, and the
+        sensor/health inputs that drove the decision (LiDAR freshness, GNSS, fusion,
+        GPS-jump). Emitted on any change of the key decision signals, otherwise as a
+        heartbeat every telemetry.heartbeat_period seconds.
+
+        MUST be fail-soft: telemetry can never disturb the control loop, so the whole
+        body is wrapped — any error degrades to a debug line, never an exception.
+        """
+        if not self._telemetry_enabled:
+            return
+        try:
+            now = time()
+
+            try:
+                avoid_state = self._obstacle_avoidance.get_current_state_name()
+            except Exception:
+                avoid_state = '?'
+
+            n_stop = n_slow = 0
+            sec_msg = self._obstacle_sectors_msg
+            if sec_msg is not None:
+                for s in sec_msg.sectors:
+                    if s.blocked and s.sector_type == 'STOP':
+                        n_stop += 1
+                    elif s.blocked and s.sector_type == 'SLOW':
+                        n_slow += 1
+            blocked = f"STOP:{n_stop},SLOW:{n_slow}"
+
+            lidar_age = (now - self._last_lidar_msg_time) if self._last_lidar_msg_time else -1.0
+
+            wp_idx = getattr(self._waypoint_follower, '_current_wp_idx', None)
+            wps = (getattr(self._waypoint_follower, '_waypoints', None)
+                   or getattr(self._waypoint_follower, '_waypoints_map', None))
+            wp_n = len(wps) if wps else 0
+
+            try:
+                rtk = self._rtk_monitor.get_current_status()
+                g1, g2 = rtk.get('gnss1_status', '?'), rtk.get('gnss2_status', '?')
+                fus, rtk_age = rtk.get('fusion_status', '?'), rtk.get('data_age_seconds', '?')
+            except Exception:
+                g1 = g2 = fus = rtk_age = '?'
+
+            moving = abs(steer) > 0.5 or abs(speed) > 0.5
+
+            # Change-signature: emit immediately when any of these flip; otherwise heartbeat.
+            sig = (self._current_state_name, avoid_state, self._obstacle_mode,
+                   blocked, moving, self._gps_jump_detected)
+            sig_changed = sig != self._navtel_last_sig
+            if sig_changed or (now - self._navtel_last_emit) >= self._telemetry_heartbeat:
+                self._navtel_last_sig = sig
+                self._navtel_last_emit = now
+                self.get_logger().info(
+                    f"[NAVTEL] state={self._current_state_name} avoid={avoid_state} "
+                    f"mode={self._obstacle_mode} wp={wp_idx}/{wp_n} "
+                    f"cmd_out=(steer={steer:.0f},spd={speed:.0f}) moving={int(moving)} "
+                    f"blocked={blocked} lidar_age={lidar_age:.2f} "
+                    f"gnss={g1}/{g2} fusion={fus} rtk_age={rtk_age} "
+                    f"gps_jump={int(self._gps_jump_detected)} "
+                    f"speed_kmh={self._speed_estimator.get_speed_kmh():.1f}"
+                )
+                # Publish a user-friendly event on real change (not heartbeat).
+                if sig_changed:
+                    try:
+                        ue = self._build_user_event_msg(
+                            self._current_state_name, avoid_state,
+                            self._obstacle_mode, n_stop, n_slow, moving,
+                            self._gps_jump_detected,
+                        )
+                        if ue and ue != self._last_user_event_msg:
+                            self._last_user_event_msg = ue
+                            m = String()
+                            m.data = ue
+                            self._log_info_pub.publish(m)
+                    except Exception as exc:
+                        self.get_logger().debug(f"user-event publish failed: {exc}")
+        except Exception as e:
+            self.get_logger().debug(f"[NAVTEL] emit skipped: {e}")
+
+    def _build_user_event_msg(self, state_name, avoid_state, obstacle_mode,
+                              n_stop, n_slow, moving, gps_jump):
+        """Map the current control snapshot to a short end-user event sentence.
+
+        Returned string is meant for the dashboard 'Ereignisse' ticker. Keep it
+        in German, present-tense, and prefix with an emoji so it parses at a
+        glance. Order matters: more critical conditions win over less critical.
+        """
+        # Sicherheits-Overrides zuerst
+        if gps_jump:
+            return "📡 GPS-Sprung erkannt. Stabilisiere Position."
+        if (avoid_state or '').upper() == 'EMERGENCY_STOP' or n_stop > 0:
+            return "🛑 Hindernis erkannt. Warte bis frei."
+
+        state = (state_name or '').upper()
+        if state == 'MANUAL':
+            return "🎮 Manuelle Steuerung aktiv."
+        if state == 'IDLE':
+            return "💤 Bereit. Warte auf Auftrag."
+        if state == 'NAVIGATING':
+            if (avoid_state or '').upper() == 'SLOW_APPROACH' or n_slow > 0:
+                return "🐢 Hindernis in der Nähe. Reduziere Geschwindigkeit."
+            if not moving:
+                return "🔍 Analysiere Umgebung."
+            return "🤖 Fahrt aktiv. Strecke frei."
+        if state == 'DOCKING':
+            if n_stop > 0 or n_slow > 0:
+                return "🔌 Andocken pausiert. Hindernis vor Ladestation."
+            return "🔌 Andocke an Ladestation."
+        if state == 'RETURNING_TO_HOME':
+            return "🏠 Kehre zur Ladestation zurück."
+        if state == 'CHARGING':
+            return "⚡ Lade. Bereit nach voller Ladung."
+        return f"ℹ️ Status: {state_name}"
+
+    def _publish_user_event_tick(self):
+        """Periodic narrator: emit the current friendly event sentence on change.
+
+        Fail-soft. Runs at 1 Hz regardless of drive activity so MANUAL / IDLE
+        states also produce dashboard messages.
+        """
+        try:
+            try:
+                avoid_state = self._obstacle_avoidance.get_current_state_name()
+            except Exception:
+                avoid_state = '?'
+            n_stop = n_slow = 0
+            sec_msg = self._obstacle_sectors_msg
+            if sec_msg is not None:
+                for s in sec_msg.sectors:
+                    if s.blocked and s.sector_type == 'STOP':
+                        n_stop += 1
+                    elif s.blocked and s.sector_type == 'SLOW':
+                        n_slow += 1
+            try:
+                speed_kmh = self._speed_estimator.get_speed_kmh()
+            except Exception:
+                speed_kmh = 0.0
+            moving = speed_kmh > 0.3
+            ue = self._build_user_event_msg(
+                self._current_state_name, avoid_state,
+                self._obstacle_mode, n_stop, n_slow, moving,
+                self._gps_jump_detected,
+            )
+            if ue and ue != self._last_user_event_msg:
+                self._last_user_event_msg = ue
+                m = String()
+                m.data = ue
+                self._log_info_pub.publish(m)
+        except Exception as exc:
+            self.get_logger().debug(f"user-event tick skipped: {exc}")
 
 
 def main(args=None):
